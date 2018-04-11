@@ -1,0 +1,3 @@
+[submodule "BME680_driver"]
+	path = BME680_driver
+	url = https://github.com/BoschSensortec/BME680_driver.git
