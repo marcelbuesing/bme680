@@ -8,4 +8,5 @@ authors = ["marcelbuesing <buesing.marcel@googlemail.com>"]
 
 [build-dependencies]
 bindgen = "0.35.0"
+bitflags = "1.0.1"
 gcc = "0.3.54"

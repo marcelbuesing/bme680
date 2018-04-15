@@ -52,6 +52,7 @@ name = "bme680-rs"
 version = "0.1.0"
 dependencies = [
  "bindgen 0.35.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bitflags 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "gcc 0.3.54 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 

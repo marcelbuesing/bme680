@@ -1,6 +1,29 @@
 use consts;
-use {to_result, Result, bme680_calib_data, bme680_dev, bme680_gas_sett, bme680_init, bme680_intf,
-     bme680_intf_BME680_I2C_INTF, bme680_tph_sett};
+use {to_result, PowerMode, Result, SensorSettings, bme680_calib_data, bme680_dev,
+     bme680_field_data, bme680_gas_sett, bme680_get_profile_dur, bme680_get_regs,
+     bme680_get_sensor_data, bme680_get_sensor_mode, bme680_get_sensor_settings, bme680_init,
+     bme680_intf, bme680_intf_BME680_I2C_INTF, bme680_set_profile_dur, bme680_set_sensor_mode,
+     bme680_set_sensor_settings, bme680_soft_reset, bme680_tph_sett};
+
+impl Default for bme680_field_data {
+    fn default() -> bme680_field_data {
+        bme680_field_data {
+            status: Default::default(),
+            /// The index of the heater profile used
+            gas_index: Default::default(),
+            /// Measurement index to track order
+            meas_index: Default::default(),
+            /// Temperature in degree celsius x100
+            temperature: Default::default(),
+            /// Pressure in Pascal
+            pressure: Default::default(),
+            /// Humidity in % relative humidity x1000
+            humidity: Default::default(),
+            /// Gas resistance in Ohms
+            gas_resistance: Default::default(),
+        }
+    }
+}
 
 pub struct Bme680Device {
     dev: bme680_dev,
@@ -16,6 +39,134 @@ impl Bme680Device {
     pub fn init(mut self) -> Result<()> {
         let dev_ptr: *mut bme680_dev = &mut self.dev;
         unsafe { to_result(bme680_init(dev_ptr)) }
+    }
+
+    /// @brief This API writes the given data to the register address
+    /// of the sensor.
+    ///
+    /// @param[in] reg_addr : Register address from where the data to be written.
+    /// @param[in] reg_data : Pointer to data buffer which is to be written
+    /// in the sensor.
+    /// @param[in] len : No of bytes of data to write..
+    /// @param[in] dev : Structure instance of bme680_dev.
+    ///
+    /// @return Result of API execution status
+    pub fn set_regs(mut self, reg_addr: u8, reg_data: &mut [u8]) -> Result<()> {
+        let dev_ptr: *mut bme680_dev = &mut self.dev;
+        unsafe {
+            to_result(bme680_get_regs(
+                reg_addr,
+                reg_data.as_mut_ptr(),
+                reg_data.len() as u16,
+                dev_ptr,
+            ))
+        }
+    }
+    /// @brief This API reads the data from the given register address of the sensor.
+    ///
+    /// @param[in] reg_addr : Register address from where the data to be read
+    /// @param[out] reg_data : buffer to store the read data.
+    ///
+    /// @return Result of API execution status
+    pub fn get_regs(mut self, reg_addr: u8, reg_data: &mut [u8]) -> Result<()> {
+        let dev_ptr: *mut bme680_dev = &mut self.dev;
+        unsafe {
+            to_result(bme680_get_regs(
+                reg_addr,
+                reg_data.as_mut_ptr(),
+                reg_data.len() as u16,
+                dev_ptr,
+            ))
+        }
+    }
+    /// @brief This API performs the soft reset of the sensor.
+    ///
+    /// @return Result of API execution status
+    pub fn soft_reset(mut self) -> Result<()> {
+        let dev_ptr: *mut bme680_dev = &mut self.dev;
+        unsafe { to_result(bme680_soft_reset(dev_ptr)) }
+    }
+
+    /// @brief This API is used to set the power mode of the sensor.
+    ///
+    /// @param[in] power_mode : Sensor power mode
+    ///
+    /// @return Result of API execution status
+    pub fn set_sensor_mode(mut self, power_mode: PowerMode) -> Result<()> {
+        self.dev.power_mode = power_mode.value();
+        let dev_ptr: *mut bme680_dev = &mut self.dev;
+        unsafe { to_result(bme680_set_sensor_mode(dev_ptr)) }
+    }
+
+    /// @brief This API is used to get the power mode of the sensor.
+    ///
+    /// @return Sensor power mode
+    pub fn get_sensor_mode(mut self) -> Result<PowerMode> {
+        let dev_ptr: *mut bme680_dev = &mut self.dev;
+        let r = unsafe { to_result(bme680_get_sensor_mode(dev_ptr)) };
+        r.map(|_| PowerMode::from(self.dev.power_mode))
+    }
+
+    /// @brief This API is used to set the profile duration of the sensor.
+    ///
+    /// @param[in] duration : Duration of the measurement in ms.
+    pub fn set_profile_dur(mut self, duration: u16) {
+        let dev_ptr: *mut bme680_dev = &mut self.dev;
+        unsafe { bme680_set_profile_dur(duration, dev_ptr) }
+    }
+
+    /// @brief This API is used to get the profile duration of the sensor.
+    ///
+    /// @return Duration of the measurement in ms.
+    pub fn get_profile_dur(mut self) -> u16 {
+        let dev_ptr: *mut bme680_dev = &mut self.dev;
+        let mut duration = 0;
+        unsafe { bme680_get_profile_dur(&mut duration, dev_ptr) };
+        duration
+    }
+
+    /// @brief This API reads the pressure, temperature and humidity and gas data
+    /// from the sensor, compensates the data and store it in the bme680_data
+    /// structure instance passed by the user.
+    ///
+    /// @param[out] data: Structure instance to hold the data.
+    /// @param[in] dev : Structure instance of bme680_dev.
+    ///
+    /// @return Result of API execution status
+    pub fn get_sensor_data(mut self) -> Result<bme680_field_data> {
+        let dev_ptr: *mut bme680_dev = &mut self.dev;
+        let mut field_data = Default::default();
+        let field_data_ptr: *mut bme680_field_data = &mut field_data;
+        let r = unsafe { to_result(bme680_get_sensor_data(field_data_ptr, dev_ptr)) };
+        r.map(|_| field_data)
+    }
+
+    /// @brief This API is used to set the oversampling, filter and T,P,H, gas selection
+    /// settings in the sensor.
+    ///
+    /// @param[in] desired_settings : Variable used to select the settings which
+    /// @return Result of API execution status
+
+    pub fn set_sensor_settings(mut self, sensor_settings: SensorSettings) -> Result<()> {
+        let dev_ptr: *mut bme680_dev = &mut self.dev;
+        unsafe { to_result(bme680_set_sensor_settings(sensor_settings.bits(), dev_ptr)) }
+    }
+
+    pub fn get_tph_sett(mut self) -> Result<bme680_tph_sett> {
+        let dev_ptr: *mut bme680_dev = &mut self.dev;
+        let settings_sel = SensorSettings::OST_SEL | SensorSettings::OSP_SEL
+            | SensorSettings::OSH_SEL | SensorSettings::FILTER_SEL;
+
+        let r = unsafe { to_result(bme680_get_sensor_settings(settings_sel.bits(), dev_ptr)) };
+        r.map(|_| self.dev.tph_sett)
+    }
+
+    pub fn get_gas_sett(mut self) -> Result<bme680_gas_sett> {
+        let dev_ptr: *mut bme680_dev = &mut self.dev;
+        let settings_sel = SensorSettings::GAS_SENSOR_SEL;
+
+        let r = unsafe { to_result(bme680_get_sensor_settings(settings_sel.bits(), dev_ptr)) };
+        r.map(|_| self.dev.gas_sett)
     }
 }
 

@@ -1,10 +1,13 @@
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
+#![feature(rustc_private)]
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
-use std::default::Default;
+#[macro_use]
+extern crate bitflags;
+
 use std::result;
 
 #[link(name = "example", kind = "static")]
@@ -74,4 +77,44 @@ pub enum I2CAddr {
 pub enum PowerMode {
     SleepMode,
     ForcedMode,
+}
+
+impl PowerMode {
+    fn from(power_mode: u8) -> Self {
+        match power_mode {
+            consts::BME680_SLEEP_MODE => PowerMode::SleepMode,
+            consts::BME680_FORCED_MODE => PowerMode::ForcedMode,
+            _ => panic!("Unknown power mode: {}", power_mode),
+        }
+    }
+
+    fn value(&self) -> u8 {
+        match self {
+            PowerMode::SleepMode => consts::BME680_SLEEP_MODE,
+            PowerMode::ForcedMode => consts::BME680_FORCED_MODE,
+        }
+    }
+}
+
+bitflags! {
+    pub struct SensorSettings: u16 {
+        /// To set temperature oversampling
+        const OST_SEL = 1;
+        /// To set pressure oversampling.
+        const OSP_SEL = 2;
+        /// To set humidity oversampling.
+        const OSH_SEL = 4;
+        /// To set gas measurement setting.
+        const GAS_MEAS_SEL = 8;
+        /// To set filter setting.
+        const FILTER_SEL = 16;
+        /// To set humidity control setting.
+        const HCNTRL_SEL = 32;
+        /// To set run gas setting.
+        const RUN_GAS_SEL = 64;
+        /// To set NB conversion setting.
+        const NBCONV_SEL = 128;
+        /// To set all gas sensor related settings
+        const GAS_SENSOR_SEL = Self::GAS_MEAS_SEL.bits | Self::RUN_GAS_SEL.bits | Self::NBCONV_SEL.bits;
+    }
 }
