@@ -1,3 +1,6 @@
+use hal::blocking::delay::DelayMs;
+use hal::blocking::i2c::{Read, Write, WriteRead};
+
 use consts;
 use {to_result, PowerMode, Result, SensorSettings, bme680_calib_data, bme680_dev,
      bme680_field_data, bme680_gas_sett, bme680_get_profile_dur, bme680_get_regs,
@@ -263,7 +266,7 @@ impl Default for bme680_tph_sett {
     }
 }
 
-pub struct Bme680DeviceBuilder {
+pub struct Bme680DeviceBuilder<I2C, D> {
     dev: bme680_dev,
 }
 
@@ -279,8 +282,11 @@ type ComFn = extern "C" fn(dev_id: u8, reg_addr: u8, data: *mut u8, len: u16) ->
 
 type DelayFn = extern "C" fn(period: u32);
 
-impl Bme680DeviceBuilder {
-    pub fn new(read: ComFn, write: ComFn, delay_ms: DelayFn) -> Self {
+impl<I2C, D, E> Bme680DeviceBuilder<I2C, D> where
+    I2C: Read<Error = E> + Write<Error = E> + WriteRead<Error = E>,
+    D: DelayMs<u8>,
+{
+    pub fn new(i2c: I2C, delay: D) -> Self {
         let dev = bme680_dev {
             /// Chip Id
             chip_id: consts::BME680_CHIP_ID,
@@ -304,12 +310,21 @@ impl Bme680DeviceBuilder {
             new_fields: Default::default(),
             /// Store the info messages
             info_msg: Default::default(),
+
+            fn read(
+                &mut self, 
+                address: u8, 
+                buffer: &mut [u8]
+            ) -> Result<(), Self::Error>;
+
+            extern "C" fn ( dev_id : u8 , reg_addr : u8 , data : * mut u8 , len : u16 ) -> i8
+
             /// Bus read function pointer
             read: Some(read),
             /// Bus write function pointer
             write: Some(write),
             /// delay function pointer
-            delay_ms: Some(delay_ms),
+            delay_ms: Some(delay.delay_ms),
             /// Communication function result
             com_rslt: Default::default(),
         };

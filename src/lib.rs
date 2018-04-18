@@ -7,8 +7,11 @@ include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 #[macro_use]
 extern crate bitflags;
+extern crate embedded_hal as hal;
 
 use std::result;
+use hal::blocking::delay::{DelayMs, DelayUs};
+use hal::blocking::i2c::{Read, Write, WriteRead};
 
 #[link(name = "example", kind = "static")]
 mod consts;

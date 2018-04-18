@@ -5,8 +5,9 @@ build = "build.rs"
 authors = ["marcelbuesing <buesing.marcel@googlemail.com>"]
 
 [dependencies]
+embedded-hal = "0.1"
 
 [build-dependencies]
-bindgen = "0.35.0"
-bitflags = "1.0.1"
-gcc = "0.3.54"
+bindgen = "0.35"
+bitflags = "1.0"
+gcc = "0.3"
