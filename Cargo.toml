@@ -5,6 +5,7 @@ build = "build.rs"
 authors = ["marcelbuesing <buesing.marcel@googlemail.com>"]
 
 [dependencies]
+byteorder = "1.2"
 embedded-hal = "0.1"
 
 [build-dependencies]

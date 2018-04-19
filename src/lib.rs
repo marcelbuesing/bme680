@@ -7,15 +7,19 @@ include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 #[macro_use]
 extern crate bitflags;
+
+extern crate byteorder;
+
 extern crate embedded_hal as hal;
 
-use std::result;
 use hal::blocking::delay::{DelayMs, DelayUs};
 use hal::blocking::i2c::{Read, Write, WriteRead};
+use std::result;
 
 #[link(name = "example", kind = "static")]
 mod consts;
-mod device_builder;
+//mod device_builder;
+mod bme680;
 
 #[cfg(test)]
 mod tests {
@@ -74,37 +78,13 @@ pub enum I2CAddr {
     Secondary,
 }
 
-///
-/// Power mode settings
-///
-pub enum PowerMode {
-    SleepMode,
-    ForcedMode,
-}
-
-impl PowerMode {
-    fn from(power_mode: u8) -> Self {
-        match power_mode {
-            consts::BME680_SLEEP_MODE => PowerMode::SleepMode,
-            consts::BME680_FORCED_MODE => PowerMode::ForcedMode,
-            _ => panic!("Unknown power mode: {}", power_mode),
-        }
-    }
-
-    fn value(&self) -> u8 {
-        match self {
-            PowerMode::SleepMode => consts::BME680_SLEEP_MODE,
-            PowerMode::ForcedMode => consts::BME680_FORCED_MODE,
-        }
-    }
-}
-
 bitflags! {
     pub struct SensorSettings: u16 {
         /// To set temperature oversampling
         const OST_SEL = 1;
         /// To set pressure oversampling.
         const OSP_SEL = 2;
+
         /// To set humidity oversampling.
         const OSH_SEL = 4;
         /// To set gas measurement setting.
