@@ -1,4 +1,5 @@
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
+
 use hal::blocking::delay::DelayMs;
 use std::result;
 
@@ -12,9 +13,20 @@ pub const BME680_I2C_ADDR_SECONDARY: u8 = 0x77;
 /** BME680 unique chip identifier */
 pub const BME680_CHIP_ID: u8 = 0x61;
 
+/** BME680 coefficients related defines */
+pub const BME680_COEFF_SIZE: u8 = 41;
+pub const BME680_COEFF_ADDR1_LEN: u8 = 25;
+pub const BME680_COEFF_ADDR2_LEN: u8 = 16;
+
+/** BME680 field_x related defines */
+pub const BME680_FIELD_LENGTH: u8 = 15;
+pub const BME680_FIELD_ADDR_OFFSET: u8 = 17;
+
 pub const BME680_SOFT_RESET_CMD: u8 = 0xb6;
 
 pub const BME680_OK: i8 = 0;
+
+/** Errors **/
 pub const BME680_E_NULL_PTR: i8 = -1;
 pub const BME680_E_COM_FAIL: i8 = -2;
 pub const BME680_E_DEV_NOT_FOUND: i8 = -3;
@@ -80,6 +92,12 @@ pub const BME680_MEM_PAGE0: u8 = 0x10;
 ///
 pub const BME680_MEM_PAGE1: u8 = 0x00;
 
+/** Buffer length macro declaration */
+pub const BME680_TMP_BUFFER_LENGTH: u8 = 40;
+pub const BME680_REG_BUFFER_LENGTH: u8 = 6;
+pub const BME680_FIELD_DATA_LENGTH: u8 = 3;
+pub const BME680_GAS_REG_BUF_LENGTH: u8 = 20;
+
 pub enum Bme680Error {
     ///
     /// aka BME680_E_NULL_PTR
@@ -97,6 +115,14 @@ pub enum Bme680Error {
     /// aka BME680_E_INVALID_LENGTH
     ///
     InvalidLength,
+    ///
+    /// Warning aka BME680_W_DEFINE_PWR_MODE
+    ///
+    DefinePwrMode,
+    ///
+    /// Warning aka BME680_W_DEFINE_PWR_MODE
+    ///
+    NoNewData,
 }
 
 pub type Result<T> = result::Result<T, Bme680Error>;
@@ -104,6 +130,7 @@ pub type Result<T> = result::Result<T, Bme680Error>;
 ///
 /// Power mode settings
 ///
+#[derive(Clone, Copy)]
 pub enum PowerMode {
     SleepMode,
     ForcedMode,
@@ -186,7 +213,7 @@ impl Clone for Bme680_tph_sett {
     }
 }
 
-#[derive(Copy)]
+#[derive(Default, Copy)]
 #[repr(C)]
 pub struct Bme680_gas_sett {
     pub nb_conv: u8,
@@ -202,7 +229,7 @@ impl Clone for Bme680_gas_sett {
     }
 }
 
-#[derive(Copy)]
+#[derive(Default, Copy)]
 #[repr(C)]
 pub struct Bme680_field_data {
     pub status: u8,
@@ -225,7 +252,6 @@ impl Clone for Bme680_field_data {
 pub struct Bme680_dev<I2C, D> {
     pub i2c: I2C,
     pub delay: D,
-    pub chip_id: u8,
     pub dev_id: u8,
     pub mem_page: u8,
     pub amb_temp: i8,
@@ -238,32 +264,43 @@ pub struct Bme680_dev<I2C, D> {
     pub com_rslt: i8,
 }
 
-impl<I2C, D, E> Clone for Bme680_dev<I2C, D> {
+impl<I2C, D> Clone for Bme680_dev<I2C, D> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<I2C, D, E> Bme680_dev<I2C, D> {
-    pub fn init(self) -> Result<()> {
-        rslt = self.bme680_get_regs(0xd0u8, &mut self.chip_id as (*mut u8), 1u16);
-        if rslt as (i32) == BME680_OK {
-            if self.chip_id as (i32) == 0x61i32 {
-                rslt = self.get_calib_data();
-            } else {
-                rslt = -3i8;
-            }
+impl<I2C, D> Bme680_dev<I2C, D>
+where
+    D: DelayMs<u8>,
+{
+    pub fn init(self) -> Result<Bme680_calib_data> {
+        self.soft_reset()?;
+
+        /* Soft reset to restore it to default values*/
+        let chip_id = self.get_regs_u8(BME680_CHIP_ID_ADDR)?;
+        if chip_id == BME680_CHIP_ID {
+            self.calib = self.get_calib_data();
+            Ok(self.calib)
+        } else {
+            Err(Bme680Error::DeviceNotFound)
         }
-        rslt
     }
 
-    pub fn bme680_get_regs(self, mut reg_addr: u8, mut reg_data: &mut [u8], mut len: u16) -> i8 {
-        let mut rslt: i8;
-        self.com_rslt = self.i2c.read(reg_addr, reg_data, len);
-        if self.com_rslt as (i32) != 0i32 {
-            rslt = -2i8;
+    pub fn get_regs_u8(self, reg_addr: u8) -> Result<u8> {
+        let mut buf = [0; 1];
+        match self.i2c.read(reg_addr, buf) {
+            Ok(()) => Ok(buf[0]),
+            Err(_) => Err(Bme680Error::CommunicationFailure),
         }
-        rslt
+    }
+
+    pub fn get_regs_i8(self, reg_addr: u8) -> Result<i8> {
+        let mut buf = [0; 1];
+        match self.i2c.read(reg_addr, buf) {
+            Ok(()) => Ok(buf[0]),
+            Err(_) => Err(Bme680Error::CommunicationFailure),
+        }
     }
 
     pub fn bme680_set_regs(
@@ -271,52 +308,45 @@ impl<I2C, D, E> Bme680_dev<I2C, D> {
         mut reg_addr: *const u8,
         mut reg_data: *const u8,
         mut len: u8,
-    ) -> i8 {
-        let mut rslt: i8;
-        let mut tmp_buff: [u8; 40] = 0i32 as ([u8; 40]);
+    ) -> Result<()> {
+        let mut tmp_buff = [0, BME680_TMP_BUFFER_LENGTH];
+
         let mut index: u16;
-        if len as (i32) > 0i32 && (len as (i32) < 40i32 / 2i32) {
-            index = 0u16;
-            'loop4: loop {
-                if !(index as (i32) < len as (i32)) {
+        if len > 0 && (len < BME680_TMP_BUFFER_LENGTH / 2) {
+            index = 0;
+            loop {
+                if !(index < len) {
                     break;
                 }
-                tmp_buff[(2i32 * index as (i32)) as (usize)] = *reg_addr.offset(index as (isize));
-                tmp_buff[(2i32 * index as (i32) + 1i32) as (usize)] =
-                    *reg_data.offset(index as (isize));
-                index = (index as (i32) + 1) as (u16);
+                tmp_buff[(2 * index) as (usize)] = *reg_addr.offset(index as (isize));
+                tmp_buff[(2 * index + 1) as (usize)] = *reg_data.offset(index as (isize));
+                index = index + 1;
             }
-            if rslt as (i32) == BME680_OK {
-                self.com_rslt = (self.write)(
-                    self.dev_id,
-                    tmp_buff[0usize],
-                    &mut tmp_buff[1usize] as (*mut u8),
-                    (2i32 * len as (i32) - 1i32) as (u16),
-                );
-                if self.com_rslt as (i32) != 0i32 {
-                    rslt = -2i8;
-                }
+
+            //if rslt as (i32) == BME680_OK {
+            self.i2c
+                .write(reg_addr, tmp_buff)
+                .map_err(Bme680Error::CommunicationFailure);
+            //self.com_rslt = self.i2c.write(
+            //    self.dev_id,
+            //    tmp_buff[0usize],
+            //    &mut tmp_buff[1usize] as (*mut u8),
+            //    (2 * len - 1),
+            //);
+
+            if self.com_rslt != 0 {
+                Err(Bme680Error::CommunicationFailure)
             }
+        //}
         } else {
-            rslt = -4i8;
+            Err(Bme680Error::InvalidLength)
         }
-        rslt
     }
 
-    pub fn soft_reset(self, delay: D) -> Result
-    where
-        D: DelayMs<u8>,
-    {
-        let mut rslt: i8;
-        let mut reg_addr: u8 = BME680_SOFT_RESET_ADDR;
-        let mut soft_rst_cmd: u8 = BME680_SOFT_RESET_CMD;
-        rslt = self.bme680_set_regs(
-            &mut reg_addr as (*mut u8) as (*const u8),
-            &mut soft_rst_cmd as (*mut u8) as (*const u8),
-            1u8,
-        );
-        delay.delay_ms(BME680_RESET_PERIOD);
-        rslt
+    pub fn soft_reset(self) -> Result<()> {
+        self.bme680_set_regs(BME680_SOFT_RESET_ADDR, BME680_SOFT_RESET_CMD, 1u8)?;
+        self.delay.delay_ms(BME680_RESET_PERIOD);
+        Ok(())
     }
 
     pub fn bme680_set_sensor_settings(self, mut desired_settings: u16) -> i8 {
@@ -338,7 +368,7 @@ impl<I2C, D, E> Bme680_dev<I2C, D> {
             rslt = self.boundary_check(&mut self.tph_sett.filter as (*mut u8), 0u8, 7u8);
             reg_addr = 0x75u8;
             if rslt as (i32) == BME680_OK {
-                rslt = self.bme680_get_regs(reg_addr, &mut data as (*mut u8), 1u16);
+                rslt = self.get_regs(reg_addr, &mut data as (*mut u8), 1u16);
             }
             if desired_settings as (i32) & 16i32 != 0 {
                 data = (data as (i32) & !0x1ci32 | self.tph_sett.filter as (i32) << 2i32 & 0x1ci32)
@@ -352,7 +382,7 @@ impl<I2C, D, E> Bme680_dev<I2C, D> {
             rslt = self.boundary_check(&mut self.gas_sett.heatr_ctrl as (*mut u8), 0x0u8, 0x8u8);
             reg_addr = 0x70u8;
             if rslt as (i32) == BME680_OK {
-                rslt = self.bme680_get_regs(reg_addr, &mut data as (*mut u8), 1u16);
+                rslt = self.get_regs(reg_addr, &mut data as (*mut u8), 1u16);
             }
             data = (data as (i32) & !0x8i32 | self.gas_sett.heatr_ctrl as (i32) & 0x8i32) as (u8);
             reg_array[count as (usize)] = reg_addr;
@@ -363,7 +393,7 @@ impl<I2C, D, E> Bme680_dev<I2C, D> {
             rslt = self.boundary_check(&mut self.tph_sett.os_temp as (*mut u8), 0u8, 5u8);
             reg_addr = 0x74u8;
             if rslt as (i32) == BME680_OK {
-                rslt = self.bme680_get_regs(reg_addr, &mut data as (*mut u8), 1u16);
+                rslt = self.get_regs(reg_addr, &mut data as (*mut u8), 1u16);
             }
             if desired_settings as (i32) & 1i32 != 0 {
                 data = (data as (i32) & !0xe0i32 | self.tph_sett.os_temp as (i32) << 5i32 & 0xe0i32)
@@ -381,7 +411,7 @@ impl<I2C, D, E> Bme680_dev<I2C, D> {
             rslt = self.boundary_check(&mut self.tph_sett.os_hum as (*mut u8), 0u8, 5u8);
             reg_addr = 0x72u8;
             if rslt as (i32) == BME680_OK {
-                rslt = self.bme680_get_regs(reg_addr, &mut data as (*mut u8), 1u16);
+                rslt = self.get_regs(reg_addr, &mut data as (*mut u8), 1u16);
             }
             data = (data as (i32) & !0x7i32 | self.tph_sett.os_hum as (i32) & 0x7i32) as (u8);
             reg_array[count as (usize)] = reg_addr;
@@ -395,7 +425,7 @@ impl<I2C, D, E> Bme680_dev<I2C, D> {
             }
             reg_addr = 0x71u8;
             if rslt as (i32) == BME680_OK {
-                rslt = self.bme680_get_regsy(reg_addr, &mut data as (*mut u8), 1u16);
+                rslt = self.get_regsy(reg_addr, &mut data as (*mut u8), 1u16);
             }
             if desired_settings as (i32) & 64i32 != 0 {
                 data = (data as (i32) & !0x10i32 | self.gas_sett.run_gas as (i32) << 4i32 & 0x10i32)
@@ -419,11 +449,11 @@ impl<I2C, D, E> Bme680_dev<I2C, D> {
         rslt
     }
 
-    pub fn bme680_get_sensor_settings(self, mut desired_settings: u16) -> i8 {
+    pub fn get_sensor_settings(self, mut desired_settings: u16) -> i8 {
         let mut rslt: i8;
         let mut reg_addr: u8 = 0x70u8;
         let mut data_array: [u8; 6] = 0i32 as ([u8; 6]);
-        rslt = self.bme680_get_regs(reg_addr, data_array.as_mut_ptr(), 6u16);
+        rslt = self.get_regs(reg_addr, data_array.as_mut_ptr(), 6u16);
         if rslt as (i32) == BME680_OK {
             if desired_settings as (i32) & 8i32 != 0 {
                 rslt = self.get_gas_config();
@@ -458,7 +488,7 @@ impl<I2C, D, E> Bme680_dev<I2C, D> {
         _currentBlock = 1;
         'loop1: loop {
             if _currentBlock == 1 {
-                rslt = self.bme680_get_regs(
+                rslt = self.get_regs(
                     BME680_CONF_T_P_MODE_ADDR,
                     &mut tmp_pow_mode as (*mut u8),
                     1u16,
@@ -502,9 +532,9 @@ impl<I2C, D, E> Bme680_dev<I2C, D> {
         }
     }
 
-    pub fn bme680_get_sensor_mode(self) -> i8 {
+    pub fn get_sensor_mode(self) -> i8 {
         let mut mode: u8;
-        let rslt = self.bme680_get_regs(BME680_CONF_T_P_MODE_ADDR, &mut mode as (*mut u8), 1u16);
+        let rslt = self.get_regs(BME680_CONF_T_P_MODE_ADDR, &mut mode as (*mut u8), 1u16);
         self.power_mode = (mode as (i32) & BME680_MODE_MSK) as (u8);
         rslt
     }
@@ -525,7 +555,7 @@ impl<I2C, D, E> Bme680_dev<I2C, D> {
         self.gas_sett.heatr_dur = (duration as (i32) - tph_dur as (u16) as (i32)) as (u16);
     }
 
-    pub fn bme680_get_profile_dur(self, mut duration: *mut u16) {
+    pub fn get_profile_dur(self, mut duration: *mut u16) {
         let mut tph_dur: u32;
         let mut meas_cycles: u32;
         let mut os_to_meas_cycles: [u8; 6] = [0u8, 1u8, 2u8, 4u8, 8u8, 16u8];
@@ -546,7 +576,7 @@ impl<I2C, D, E> Bme680_dev<I2C, D> {
         }
     }
 
-    pub fn bme680_get_sensor_data(self, mut data: *mut Bme680_field_data) -> i8 {
+    pub fn get_sensor_data(self, mut data: *mut Bme680_field_data) -> i8 {
         let mut rslt: i8;
         rslt = self.read_field_data(data);
         if rslt as (i32) == BME680_OK {
@@ -563,9 +593,9 @@ impl<I2C, D, E> Bme680_dev<I2C, D> {
         let mut rslt: i8;
         let mut coeff_array: [u8; 41] = 0i32 as ([u8; 41]);
         let mut temp_var: u8 = 0u8;
-        rslt = self.bme680_get_regs(0x89u8, coeff_array.as_mut_ptr(), 25u16);
+        rslt = self.get_regs(0x89u8, coeff_array.as_mut_ptr(), 25u16);
         if rslt as (i32) == BME680_OK {
-            rslt = self.bme680_get_regs(0xe1u8, &mut coeff_array[25usize] as (*mut u8), 16u16);
+            rslt = self.get_regs(0xe1u8, &mut coeff_array[25usize] as (*mut u8), 16u16);
         }
         self.calib.par_t1 = (coeff_array[34usize] as (u16) as (i32) << 8i32
             | coeff_array[33usize] as (u16) as (i32)) as (u16);
@@ -602,13 +632,13 @@ impl<I2C, D, E> Bme680_dev<I2C, D> {
             | coeff_array[35usize] as (u16) as (i32)) as (i16);
         self.calib.par_gh3 = coeff_array[38usize] as (i8);
         if rslt as (i32) == BME680_OK {
-            rslt = self.bme680_get_regs(0x2u8, &mut temp_var as (*mut u8), 1u16);
+            rslt = self.get_regs(0x2u8, &mut temp_var as (*mut u8), 1u16);
             self.calib.res_heat_range = ((temp_var as (i32) & 0x30i32) / 16i32) as (u8);
             if rslt as (i32) == BME680_OK {
-                rslt = self.bme680_get_regs(0x0u8, &mut temp_var as (*mut u8), 1u16);
+                rslt = self.get_regs(0x0u8, &mut temp_var as (*mut u8), 1u16);
                 self.calib.res_heat_val = temp_var as (i8);
                 if rslt as (i32) == BME680_OK {
-                    rslt = self.bme680_get_regs(0x4u8, &mut temp_var as (*mut u8), 1u16);
+                    rslt = self.get_regs(0x4u8, &mut temp_var as (*mut u8), 1u16);
                 }
             }
         }
@@ -639,18 +669,12 @@ impl<I2C, D, E> Bme680_dev<I2C, D> {
         rslt
     }
 
-    fn get_gas_config(self) -> i8 {
-        let mut rslt: i8;
-        let mut reg_addr1: u8 = 0x5au8;
-        let mut reg_addr2: u8 = 0x64u8;
-        let mut reg_data: u8 = 0u8;
-        rslt = self.bme680_get_regs(reg_addr1, &mut reg_data as (*mut u8), 1u16);
-        self.gas_sett.heatr_temp = reg_data as (u16);
-        rslt = self.bme680_get_regs(reg_addr2, &mut reg_data as (*mut u8), 1u16);
-        if rslt as (i32) == BME680_OK {
-            self.gas_sett.heatr_dur = reg_data as (u16);
-        }
-        rslt
+    fn get_gas_config(self) -> Result<Bme680_gas_sett> {
+        let mut gas_sett: Bme680_gas_sett = Default::default();
+        // TODO figure out if heat_temp and dur can be u8
+        self.gas_sett.heatr_temp = self.get_regs_u8(BME680_ADDR_SENS_CONF_START)? as u16;
+        self.gas_sett.heatr_dur = self.get_regs_u8(BME680_ADDR_GAS_CONF_START)? as u16;
+        Ok(gas_sett)
     }
 
     fn calc_heater_res(self, mut temp: u16) -> u8 {
@@ -800,7 +824,7 @@ impl<I2C, D, E> Bme680_dev<I2C, D> {
             8000000u32,
             4000000u32,
             2000000u32,
-            1000000u32,
+            1,
             500000u32,
             250000u32,
             125000u32,
@@ -813,55 +837,52 @@ impl<I2C, D, E> Bme680_dev<I2C, D> {
         calc_gas_res
     }
 
-    fn read_field_data(self, mut data: *mut Bme680_field_data) -> i8 {
+    fn read_field_data(self) -> Result<Bme680_field_data> {
         let mut _currentBlock;
         let mut rslt: i8;
-        let mut buff: [u8; 15] = 0i32 as ([u8; 15]);
+        let mut buff = [0, BME680_FIELD_LENGTH];
+        let mut data: Bme680_field_data = Default::default();
         let mut gas_range: u8;
         let mut adc_temp: u32;
         let mut adc_pres: u32;
         let mut adc_hum: u16;
         let mut adc_gas_res: u16;
         let mut tries: u8 = 10u8;
-        'loop1: loop {
-            rslt = self.bme680_get_regs(0x1du8, buff.as_mut_ptr(), 15u16);
-            (*data).status = (buff[0usize] as (i32) & 0x80i32) as (u8);
-            (*data).gas_index = (buff[0usize] as (i32) & 0xfi32) as (u8);
-            (*data).meas_index = buff[1usize];
-            adc_pres = (buff[2usize] as (u32)).wrapping_mul(4096u32)
-                | (buff[3usize] as (u32)).wrapping_mul(16u32)
-                | (buff[4usize] as (u32)).wrapping_div(16u32);
-            adc_temp = (buff[5usize] as (u32)).wrapping_mul(4096u32)
-                | (buff[6usize] as (u32)).wrapping_mul(16u32)
-                | (buff[7usize] as (u32)).wrapping_div(16u32);
-            adc_hum =
-                ((buff[8usize] as (u32)).wrapping_mul(256u32) | buff[9usize] as (u32)) as (u16);
-            adc_gas_res = ((buff[13usize] as (u32)).wrapping_mul(4u32)
-                | (buff[14usize] as (u32)).wrapping_div(64u32)) as (u16);
-            gas_range = (buff[14usize] as (i32) & 0xfi32) as (u8);
-            (*data).status = ((*data).status as (i32) | buff[14usize] as (i32) & 0x20i32) as (u8);
-            (*data).status = ((*data).status as (i32) | buff[14usize] as (i32) & 0x10i32) as (u8);
-            if (*data).status as (i32) & 0x80i32 != 0 {
-                _currentBlock = 6;
-                break;
+
+        loop {
+            self.get_regs(BME680_FIELD0_ADDR, buff.as_mut_ptr(), BME680_FIELD_LENGTH)?;
+            data.status = buff[0] & BME680_NEW_DATA_MSK;
+            data.gas_index = buff[0] & BME680_GAS_INDEX_MSK;;
+            data.meas_index = buff[1];
+
+            adc_pres = (buff[2] as (u32)).wrapping_mul(4096) | (buff[3] as (u32)).wrapping_mul(16)
+                | (buff[4] as (u32)).wrapping_div(16);
+            adc_temp = (buff[5] as (u32)).wrapping_mul(4096) | (buff[6] as (u32)).wrapping_mul(16)
+                | (buff[7] as (u32)).wrapping_div(16);
+            adc_hum = ((buff[8] as (u32)).wrapping_mul(256) | buff[9] as (u32)) as (u16);
+            adc_gas_res = ((buff[13] as (u32)).wrapping_mul(4)
+                | (buff[14] as (u32)).wrapping_div(64)) as (u16);
+            gas_range = buff[14] & BME680_GAS_RANGE_MSK;
+
+            data.status = data.status | buff[14] & BME680_GASM_VALID_MSK;
+            data.status = data.status | buff[14] & BME680_HEAT_STAB_MSK;
+
+            if data.status & BME680_NEW_DATA_MSK != 0 {
+                data.temperature = self.calc_temperature(adc_temp);
+                data.pressure = self.calc_pressure(adc_pres);
+                data.humidity = self.calc_humidity(adc_hum);
+                data.gas_resistance = self.calc_gas_resistance(adc_gas_res, gas_range);
+                return Ok(data);
             }
-            (self.delay_ms)(10u32);
-            tries = (tries as (i32) - 1) as (u8);
+
+            self.delay.delay_ms(BME680_POLL_PERIOD_MS);
+
+            tries = tries - 1;
             if tries == 0 {
-                _currentBlock = 7;
                 break;
             }
         }
-        if _currentBlock == 6 {
-            (*data).temperature = self.calc_temperature(adc_temp);
-            (*data).pressure = self.calc_pressure(adc_pres);
-            (*data).humidity = self.calc_humidity(adc_hum);
-            (*data).gas_resistance = self.calc_gas_resistance(adc_gas_res, gas_range);
-        }
-        if tries == 0 {
-            rslt = 2i8;
-        }
-        rslt
+        Err(Bme680Error::NoNewData)
     }
 
     fn boundary_check(self, mut value: *mut u8, mut min: u8, mut max: u8) -> i8 {
