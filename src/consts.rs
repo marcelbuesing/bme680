@@ -21,3 +21,14 @@ pub const BME680_MEM_PAGE0: u8 = 0x10;
 /// SPI memory page settings
 ///
 pub const BME680_MEM_PAGE1: u8 = 0x00;
+
+/* Settings selector */
+pub const BME680_OST_SEL: u16 = 1;
+pub const BME680_OSP_SEL: u16 = 2;
+pub const BME680_OSH_SEL: u16 = 4;
+pub const BME680_GAS_MEAS_SEL: u16 = 8;
+pub const BME680_FILTER_SEL: u16 = 16;
+pub const BME680_HCNTRL_SEL: u16 = 32;
+pub const BME680_RUN_GAS_SEL: u16 = 64;
+pub const BME680_NBCONV_SEL: u16 = 128;
+pub const BME680_GAS_SENSOR_SEL: u16 = BME680_GAS_MEAS_SEL | BME680_RUN_GAS_SEL | BME680_NBCONV_SEL;

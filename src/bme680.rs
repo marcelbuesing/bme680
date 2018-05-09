@@ -1,6 +1,9 @@
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
 
 use hal::blocking::delay::DelayMs;
+use hal::blocking::i2c::{Read, Write, WriteRead};
+use std::convert::TryFrom;
+
 use std::result;
 
 /** BME680 General config */
@@ -14,7 +17,7 @@ pub const BME680_I2C_ADDR_SECONDARY: u8 = 0x77;
 pub const BME680_CHIP_ID: u8 = 0x61;
 
 /** BME680 coefficients related defines */
-pub const BME680_COEFF_SIZE: u8 = 41;
+pub const BME680_COEFF_SIZE: usize = 41;
 pub const BME680_COEFF_ADDR1_LEN: u8 = 25;
 pub const BME680_COEFF_ADDR2_LEN: u8 = 16;
 
@@ -31,6 +34,14 @@ pub const BME680_E_NULL_PTR: i8 = -1;
 pub const BME680_E_COM_FAIL: i8 = -2;
 pub const BME680_E_DEV_NOT_FOUND: i8 = -3;
 pub const BME680_E_INVALID_LENGTH: i8 = -4;
+
+/** Register map */
+/** Other coefficient's address */
+pub const BME680_ADDR_RES_HEAT_VAL_ADDR: u8 = 0x00;
+pub const BME680_ADDR_RES_HEAT_RANGE_ADDR: u8 = 0x02;
+pub const BME680_ADDR_RANGE_SW_ERR_ADDR: u8 = 0x04;
+pub const BME680_ADDR_SENS_CONF_START: u8 = 0x5A;
+pub const BME680_ADDR_GAS_CONF_START: u8 = 0x64;
 
 pub const BME680_SOFT_RESET_ADDR: u8 = 0xe0;
 
@@ -59,7 +70,7 @@ pub const BME680_CHIP_ID_ADDR: u8 = 0xd0;
 pub const BME680_SLEEP_MODE: u8 = 0;
 pub const BME680_FORCED_MODE: u8 = 1;
 
-pub const BME680_RESET_PERIOD: u32 = 10;
+pub const BME680_RESET_PERIOD: u8 = 10;
 
 pub const BME680_GAS_MEAS_MSK: u8 = 0x30;
 pub const BME680_NBCONV_MSK: u8 = 0x0F;
@@ -98,6 +109,17 @@ pub const BME680_REG_BUFFER_LENGTH: u8 = 6;
 pub const BME680_FIELD_DATA_LENGTH: u8 = 3;
 pub const BME680_GAS_REG_BUF_LENGTH: u8 = 20;
 
+/* Settings selector */
+pub const BME680_OST_SEL: u16 = 1;
+pub const BME680_OSP_SEL: u16 = 2;
+pub const BME680_OSH_SEL: u16 = 4;
+pub const BME680_GAS_MEAS_SEL: u16 = 8;
+pub const BME680_FILTER_SEL: u16 = 16;
+pub const BME680_HCNTRL_SEL: u16 = 32;
+pub const BME680_RUN_GAS_SEL: u16 = 64;
+pub const BME680_NBCONV_SEL: u16 = 128;
+pub const BME680_GAS_SENSOR_SEL: u16 = BME680_GAS_MEAS_SEL | BME680_RUN_GAS_SEL | BME680_NBCONV_SEL;
+
 pub enum Bme680Error {
     ///
     /// aka BME680_E_NULL_PTR
@@ -123,6 +145,10 @@ pub enum Bme680Error {
     /// Warning aka BME680_W_DEFINE_PWR_MODE
     ///
     NoNewData,
+    ///
+    /// Warning Boundary Check
+    ///
+    BoundaryCheckFailure(InfoMsg, u8, u8),
 }
 
 pub type Result<T> = result::Result<T, Bme680Error>;
@@ -130,7 +156,7 @@ pub type Result<T> = result::Result<T, Bme680Error>;
 ///
 /// Power mode settings
 ///
-#[derive(Clone, Copy)]
+#[derive(PartialEq, Clone, Copy)]
 pub enum PowerMode {
     SleepMode,
     ForcedMode,
@@ -160,9 +186,9 @@ pub enum Bme680_intf {
     BME680_I2C_INTF,
 }
 
-#[derive(Copy)]
+#[derive(Default, Copy)]
 #[repr(C)]
-pub struct Bme680_calib_data {
+pub struct CalibData {
     pub par_h1: u16,
     pub par_h2: u16,
     pub par_h3: i8,
@@ -192,7 +218,7 @@ pub struct Bme680_calib_data {
     pub range_sw_err: i8,
 }
 
-impl Clone for Bme680_calib_data {
+impl Clone for CalibData {
     fn clone(&self) -> Self {
         *self
     }
@@ -200,14 +226,14 @@ impl Clone for Bme680_calib_data {
 
 #[derive(Copy)]
 #[repr(C)]
-pub struct Bme680_tph_sett {
+pub struct TphSett {
     pub os_hum: u8,
     pub os_temp: u8,
     pub os_pres: u8,
     pub filter: u8,
 }
 
-impl Clone for Bme680_tph_sett {
+impl Clone for TphSett {
     fn clone(&self) -> Self {
         *self
     }
@@ -215,7 +241,7 @@ impl Clone for Bme680_tph_sett {
 
 #[derive(Default, Copy)]
 #[repr(C)]
-pub struct Bme680_gas_sett {
+pub struct GasSett {
     pub nb_conv: u8,
     pub heatr_ctrl: u8,
     pub run_gas: u8,
@@ -223,7 +249,7 @@ pub struct Bme680_gas_sett {
     pub heatr_dur: u16,
 }
 
-impl Clone for Bme680_gas_sett {
+impl Clone for GasSett {
     fn clone(&self) -> Self {
         *self
     }
@@ -231,7 +257,7 @@ impl Clone for Bme680_gas_sett {
 
 #[derive(Default, Copy)]
 #[repr(C)]
-pub struct Bme680_field_data {
+pub struct FieldData {
     pub status: u8,
     pub gas_index: u8,
     pub meas_index: u8,
@@ -241,9 +267,57 @@ pub struct Bme680_field_data {
     pub gas_resistance: u32,
 }
 
-impl Clone for Bme680_field_data {
+impl Clone for FieldData {
     fn clone(&self) -> Self {
         *self
+    }
+}
+
+/// TODO - replace naming of "State" with something better
+/// aka new_fields - BME680_NEW_DATA_MSK
+///
+pub enum FieldDataState {
+    NewData,
+    // TODO find better naming to no new data
+    NoNewData,
+}
+
+/// Infos
+bitflags! {
+    #[derive(Default)]
+    pub struct InfoMsg: u8 {
+        const MIN_CORRECTION = 1;
+        const MAX_CORRECTION = 2;
+    }
+}
+
+#[derive(Default)]
+pub struct SensorSettings {
+    gas_sett: Option<GasSett>,
+    tph_sett: Option<TphSett>,
+}
+
+bitflags! {
+    pub struct DesiredSensorSettings: u16 {
+        /// To set temperature oversampling
+        const OST_SEL = 1;
+        /// To set pressure oversampling.
+        const OSP_SEL = 2;
+
+        /// To set humidity oversampling.
+        const OSH_SEL = 4;
+        /// To set gas measurement setting.
+        const GAS_MEAS_SEL = 8;
+        /// To set filter setting.
+        const FILTER_SEL = 16;
+        /// To set humidity control setting.
+        const HCNTRL_SEL = 32;
+        /// To set run gas setting.
+        const RUN_GAS_SEL = 64;
+        /// To set NB conversion setting.
+        const NBCONV_SEL = 128;
+        /// To set all gas sensor related settings
+        const GAS_SENSOR_SEL = Self::GAS_MEAS_SEL.bits | Self::RUN_GAS_SEL.bits | Self::NBCONV_SEL.bits;
     }
 }
 
@@ -255,13 +329,12 @@ pub struct Bme680_dev<I2C, D> {
     pub dev_id: u8,
     pub mem_page: u8,
     pub amb_temp: i8,
-    pub calib: Bme680_calib_data,
-    pub tph_sett: Bme680_tph_sett,
-    pub gas_sett: Bme680_gas_sett,
+    pub calib: CalibData,
+    pub tph_sett: TphSett,
+    pub gas_sett: GasSett,
     pub power_mode: PowerMode,
     pub new_fields: u8,
     pub info_msg: u8,
-    pub com_rslt: i8,
 }
 
 impl<I2C, D> Clone for Bme680_dev<I2C, D> {
@@ -273,14 +346,15 @@ impl<I2C, D> Clone for Bme680_dev<I2C, D> {
 impl<I2C, D> Bme680_dev<I2C, D>
 where
     D: DelayMs<u8>,
+    I2C: Read + Write,
 {
-    pub fn init(self) -> Result<Bme680_calib_data> {
+    pub fn init(self) -> Result<CalibData> {
         self.soft_reset()?;
 
         /* Soft reset to restore it to default values*/
         let chip_id = self.get_regs_u8(BME680_CHIP_ID_ADDR)?;
         if chip_id == BME680_CHIP_ID {
-            self.calib = self.get_calib_data();
+            self.calib = self.get_calib_data()?;
             Ok(self.calib)
         } else {
             Err(Bme680Error::DeviceNotFound)
@@ -289,7 +363,7 @@ where
 
     pub fn get_regs_u8(self, reg_addr: u8) -> Result<u8> {
         let mut buf = [0; 1];
-        match self.i2c.read(reg_addr, buf) {
+        match self.i2c.read(reg_addr, &mut buf) {
             Ok(()) => Ok(buf[0]),
             Err(_) => Err(Bme680Error::CommunicationFailure),
         }
@@ -297,25 +371,20 @@ where
 
     pub fn get_regs_i8(self, reg_addr: u8) -> Result<i8> {
         let mut buf = [0; 1];
-        match self.i2c.read(reg_addr, buf) {
-            Ok(()) => Ok(buf[0]),
+        match self.i2c.read(reg_addr, &mut buf) {
+            Ok(()) => Ok(i8::try_from(buf[0]).expect("U8 overflow when reading register")),
             Err(_) => Err(Bme680Error::CommunicationFailure),
         }
     }
 
-    pub fn bme680_set_regs(
-        self,
-        mut reg_addr: *const u8,
-        mut reg_data: *const u8,
-        mut len: u8,
-    ) -> Result<()> {
+    pub fn bme680_set_regs(self, reg_addr: u8, reg_data: *const u8, len: u8) -> Result<()> {
         let mut tmp_buff = [0, BME680_TMP_BUFFER_LENGTH];
 
         let mut index: u16;
         if len > 0 && (len < BME680_TMP_BUFFER_LENGTH / 2) {
             index = 0;
             loop {
-                if !(index < len) {
+                if !(index < len as u16) {
                     break;
                 }
                 tmp_buff[(2 * index) as (usize)] = *reg_addr.offset(index as (isize));
@@ -323,21 +392,9 @@ where
                 index = index + 1;
             }
 
-            //if rslt as (i32) == BME680_OK {
             self.i2c
-                .write(reg_addr, tmp_buff)
-                .map_err(Bme680Error::CommunicationFailure);
-            //self.com_rslt = self.i2c.write(
-            //    self.dev_id,
-            //    tmp_buff[0usize],
-            //    &mut tmp_buff[1usize] as (*mut u8),
-            //    (2 * len - 1),
-            //);
-
-            if self.com_rslt != 0 {
-                Err(Bme680Error::CommunicationFailure)
-            }
-        //}
+                .write(reg_addr, &tmp_buff)
+                .map_err(|_| Bme680Error::CommunicationFailure)
         } else {
             Err(Bme680Error::InvalidLength)
         }
@@ -349,28 +406,30 @@ where
         Ok(())
     }
 
-    pub fn bme680_set_sensor_settings(self, mut desired_settings: u16) -> i8 {
-        let mut rslt: i8;
+    // TODO replace parameter desired_settings with safe flags
+    pub fn bme680_set_sensor_settings(
+        self,
+        desired_settings: DesiredSensorSettings,
+        gas_sett: Option<GasSett>,
+    ) -> Result<()> {
         let mut reg_addr: u8;
-        let mut data: u8 = 0u8;
+        //        let mut data: u8 = 0u8;
         let mut count: u8 = 0u8;
         let mut reg_array: [u8; 6] = 0i32 as ([u8; 6]);
         let mut data_array: [u8; 6] = 0i32 as ([u8; 6]);
-        let mut intended_power_mode: u8 = self.power_mode;
-        if desired_settings as (i32) & 8i32 != 0 {
-            rslt = self.set_gas_config();
+        let mut intended_power_mode = self.power_mode;
+
+        if desired_settings.contains(DesiredSensorSettings::GAS_MEAS_SEL) {
+            self.set_gas_config(gas_sett.unwrap())?;
         }
-        self.power_mode = 0u8;
-        if rslt as (i32) == BME680_OK {
-            rslt = self.bme680_set_sensor_mode();
-        }
-        if desired_settings as (i32) & 16i32 != 0 {
-            rslt = self.boundary_check(&mut self.tph_sett.filter as (*mut u8), 0u8, 7u8);
+
+        self.bme680_set_sensor_mode(self.power_mode)?;
+
+        if desired_settings.contains(DesiredSensorSettings::FILTER_SEL) {
+            self.boundary_check(self.tph_sett.filter, 0, 7)?;
             reg_addr = 0x75u8;
-            if rslt as (i32) == BME680_OK {
-                rslt = self.get_regs(reg_addr, &mut data as (*mut u8), 1u16);
-            }
-            if desired_settings as (i32) & 16i32 != 0 {
+            let mut data = self.get_regs_u8(reg_addr)?;
+            if desired_settings.contains(DesiredSensorSettings::FILTER_SEL) {
                 data = (data as (i32) & !0x1ci32 | self.tph_sett.filter as (i32) << 2i32 & 0x1ci32)
                     as (u8);
             }
@@ -378,165 +437,170 @@ where
             data_array[count as (usize)] = data;
             count = (count as (i32) + 1) as (u8);
         }
-        if desired_settings as (i32) & 32i32 != 0 {
-            rslt = self.boundary_check(&mut self.gas_sett.heatr_ctrl as (*mut u8), 0x0u8, 0x8u8);
+
+        if desired_settings.contains(DesiredSensorSettings::HCNTRL_SEL) {
+            self.boundary_check(self.gas_sett.heatr_ctrl, 0x0u8, 0x8u8)?;
             reg_addr = 0x70u8;
-            if rslt as (i32) == BME680_OK {
-                rslt = self.get_regs(reg_addr, &mut data as (*mut u8), 1u16);
-            }
+            let mut data = self.get_regs_u8(reg_addr)?;
             data = (data as (i32) & !0x8i32 | self.gas_sett.heatr_ctrl as (i32) & 0x8i32) as (u8);
             reg_array[count as (usize)] = reg_addr;
             data_array[count as (usize)] = data;
             count = (count as (i32) + 1) as (u8);
         }
-        if desired_settings as (i32) & (1i32 | 2i32) != 0 {
-            rslt = self.boundary_check(&mut self.tph_sett.os_temp as (*mut u8), 0u8, 5u8);
+
+        if desired_settings
+            .contains(DesiredSensorSettings::OST_SEL | DesiredSensorSettings::OSP_SEL)
+        {
+            self.boundary_check(self.tph_sett.os_temp, 0, 5)?;
             reg_addr = 0x74u8;
-            if rslt as (i32) == BME680_OK {
-                rslt = self.get_regs(reg_addr, &mut data as (*mut u8), 1u16);
-            }
-            if desired_settings as (i32) & 1i32 != 0 {
+            let mut data = self.get_regs_u8(reg_addr)?;
+
+            if desired_settings.contains(DesiredSensorSettings::OST_SEL) {
                 data = (data as (i32) & !0xe0i32 | self.tph_sett.os_temp as (i32) << 5i32 & 0xe0i32)
                     as (u8);
             }
-            if desired_settings as (i32) & 2i32 != 0 {
+
+            if desired_settings.contains(DesiredSensorSettings::OSP_SEL) {
                 data = (data as (i32) & !0x1ci32 | self.tph_sett.os_pres as (i32) << 2i32 & 0x1ci32)
                     as (u8);
             }
+
             reg_array[count as (usize)] = reg_addr;
             data_array[count as (usize)] = data;
             count = (count as (i32) + 1) as (u8);
         }
-        if desired_settings as (i32) & 4i32 != 0 {
-            rslt = self.boundary_check(&mut self.tph_sett.os_hum as (*mut u8), 0u8, 5u8);
+
+        if desired_settings.contains(DesiredSensorSettings::OSH_SEL) {
+            self.boundary_check(self.tph_sett.os_hum, 0, 5)?;
             reg_addr = 0x72u8;
-            if rslt as (i32) == BME680_OK {
-                rslt = self.get_regs(reg_addr, &mut data as (*mut u8), 1u16);
-            }
+            let mut data = self.get_regs_u8(reg_addr)?;
             data = (data as (i32) & !0x7i32 | self.tph_sett.os_hum as (i32) & 0x7i32) as (u8);
             reg_array[count as (usize)] = reg_addr;
             data_array[count as (usize)] = data;
             count = (count as (i32) + 1) as (u8);
         }
-        if desired_settings as (i32) & (64i32 | 128i32) != 0 {
-            rslt = self.boundary_check(&mut self.gas_sett.run_gas as (*mut u8), 0u8, 1u8);
-            if rslt as (i32) == BME680_OK {
-                rslt = self.boundary_check(&mut self.gas_sett.nb_conv as (*mut u8), 0u8, 10u8);
-            }
+
+        if desired_settings
+            .contains(DesiredSensorSettings::RUN_GAS_SEL | DesiredSensorSettings::NBCONV_SEL)
+        {
+            self.boundary_check(self.gas_sett.run_gas, 0, 1)?;
+            self.boundary_check(self.gas_sett.nb_conv, 0, 10)?;
             reg_addr = 0x71u8;
-            if rslt as (i32) == BME680_OK {
-                rslt = self.get_regsy(reg_addr, &mut data as (*mut u8), 1u16);
-            }
-            if desired_settings as (i32) & 64i32 != 0 {
+            let mut data = self.get_regs_u8(reg_addr)?;
+
+            if desired_settings.contains(DesiredSensorSettings::RUN_GAS_SEL) {
                 data = (data as (i32) & !0x10i32 | self.gas_sett.run_gas as (i32) << 4i32 & 0x10i32)
                     as (u8);
             }
-            if desired_settings as (i32) & 128i32 != 0 {
+
+            if desired_settings.contains(DesiredSensorSettings::NBCONV_SEL) {
                 data = (data as (i32) & !0xfi32 | self.gas_sett.nb_conv as (i32) & 0xfi32) as (u8);
             }
+
             reg_array[count as (usize)] = reg_addr;
             data_array[count as (usize)] = data;
             count = (count as (i32) + 1) as (u8);
         }
-        if rslt as (i32) == BME680_OK {
-            rslt = self.bme680_set_regs(
-                reg_array.as_mut_ptr() as (*const u8),
-                data_array.as_mut_ptr() as (*const u8),
-                count,
-            );
-        }
+
+        self.bme680_set_regs(
+            reg_array.as_mut_ptr() as (*const u8),
+            data_array.as_mut_ptr() as (*const u8),
+            count,
+        )?;
+
         self.power_mode = intended_power_mode;
-        rslt
+        Ok(())
     }
 
-    pub fn get_sensor_settings(self, mut desired_settings: u16) -> i8 {
-        let mut rslt: i8;
+    // TODO replace desired_settings with proper flags type see lib.rs
+    pub fn get_sensor_settings(self, mut desired_settings: u16) -> Result<SensorSettings> {
         let mut reg_addr: u8 = 0x70u8;
         let mut data_array: [u8; 6] = 0i32 as ([u8; 6]);
-        rslt = self.get_regs(reg_addr, data_array.as_mut_ptr(), 6u16);
-        if rslt as (i32) == BME680_OK {
-            if desired_settings as (i32) & 8i32 != 0 {
-                rslt = self.get_gas_config();
-            }
-            if desired_settings as (i32) & 16i32 != 0 {
-                self.tph_sett.filter = ((data_array[5usize] as (i32) & 0x1ci32) >> 2i32) as (u8);
-            }
-            if desired_settings as (i32) & (1i32 | 2i32) != 0 {
-                self.tph_sett.os_temp = ((data_array[4usize] as (i32) & 0xe0i32) >> 5i32) as (u8);
-                self.tph_sett.os_pres = ((data_array[4usize] as (i32) & 0x1ci32) >> 2i32) as (u8);
-            }
-            if desired_settings as (i32) & 4i32 != 0 {
-                self.tph_sett.os_hum = (data_array[2usize] as (i32) & 0x7i32) as (u8);
-            }
-            if desired_settings as (i32) & 32i32 != 0 {
-                self.gas_sett.heatr_ctrl = (data_array[0usize] as (i32) & 0x8i32) as (u8);
-            }
-            if desired_settings as (i32) & (64i32 | 128i32) != 0 {
-                self.gas_sett.nb_conv = (data_array[1usize] as (i32) & 0xfi32) as (u8);
-                self.gas_sett.run_gas = ((data_array[1usize] as (i32) & 0x10i32) >> 4i32) as (u8);
-            }
+        let mut sensor_settings = Default::default();
+
+        let data_array = self.get_regs(reg_addr, data_array.as_mut_ptr(), 6u16)?;
+
+        if desired_settings as (i32) & 8i32 != 0 {
+            sensor_settings.gas_sett = Some(self.get_gas_config()?);
         }
-        rslt
+
+        if desired_settings as (i32) & 16i32 != 0 {
+            sensor_settings.tph_sett.filter =
+                ((data_array[5usize] as (i32) & 0x1ci32) >> 2i32) as (u8);
+        }
+
+        if desired_settings as (i32) & (1i32 | 2i32) != 0 {
+            sensor_settings.tph_sett.os_temp =
+                ((data_array[4usize] as (i32) & 0xe0i32) >> 5i32) as (u8);
+            sensor_settings.tph_sett.os_pres =
+                ((data_array[4usize] as (i32) & 0x1ci32) >> 2i32) as (u8);
+        }
+
+        if desired_settings as (i32) & 4i32 != 0 {
+            sensor_settings.tph_sett.os_hum = (data_array[2usize] as (i32) & 0x7i32) as (u8);
+        }
+
+        if desired_settings as (i32) & 32i32 != 0 {
+            sensor_settings.gas_sett.heatr_ctrl = (data_array[0usize] as (i32) & 0x8i32) as (u8);
+        }
+
+        if desired_settings as (i32) & (64i32 | 128i32) != 0 {
+            sensor_settings.gas_sett.nb_conv = (data_array[1usize] as (i32) & 0xfi32) as (u8);
+            sensor_settings.gas_sett.run_gas =
+                ((data_array[1usize] as (i32) & 0x10i32) >> 4i32) as (u8);
+        }
+
+        Ok(sensor_settings)
     }
 
-    pub fn bme680_set_sensor_mode(self) -> i8 {
-        let mut _currentBlock;
-        let mut rslt: i8;
+    pub fn bme680_set_sensor_mode(self, power_mode: PowerMode) -> Result<()> {
         let mut tmp_pow_mode: u8;
         let mut pow_mode: u8 = 0u8;
+        let mut power_mode = PowerMode::SleepMode;
         let mut reg_addr: u8 = 0x74u8;
-        _currentBlock = 1;
-        'loop1: loop {
-            if _currentBlock == 1 {
-                rslt = self.get_regs(
-                    BME680_CONF_T_P_MODE_ADDR,
-                    &mut tmp_pow_mode as (*mut u8),
-                    1u16,
-                );
-                if rslt as (i32) == BME680_OK {
-                    pow_mode = (tmp_pow_mode as (i32) & 0x3i32) as (u8);
-                    if pow_mode as (i32) != 0i32 {
-                        tmp_pow_mode = (tmp_pow_mode as (i32) & !0x3i32) as (u8);
-                        rslt = self.bme680_set_regs(
-                            &mut reg_addr as (*mut u8) as (*const u8),
-                            &mut tmp_pow_mode as (*mut u8) as (*const u8),
-                            1u8,
-                        );
-                        (self.delay_ms)(BME680_POLL_PERIOD_MS);
-                    }
-                }
-                if pow_mode as (i32) != BME680_SLEEP_MODE {
-                    _currentBlock = 1;
-                    continue;
-                }
-                if !(self.power_mode as (i32) != BME680_SLEEP_MODE) {
-                    _currentBlock = 8;
-                    continue;
-                }
-                tmp_pow_mode = (tmp_pow_mode as (i32) & !BME680_MODE_MSK
-                    | self.power_mode as (i32) & BME680_MODE_MSK)
-                    as (u8);
-                if !(rslt as (i32) == BME680_OK) {
-                    _currentBlock = 8;
-                    continue;
-                }
-                rslt = self.bme680_set_regs(
+
+        /* Call repeatedly until in sleep */
+        loop {
+            self.get_regs(
+                BME680_CONF_T_P_MODE_ADDR,
+                &mut tmp_pow_mode as (*mut u8),
+                1u16,
+            )?;
+
+            /* Put to sleep before changing mode */
+            pow_mode = tmp_pow_mode & BME680_MODE_MSK;
+
+            if power_mode != PowerMode::SleepMode {
+                /* Set to sleep*/
+                tmp_pow_mode = tmp_pow_mode & !BME680_MODE_MSK;
+                self.bme680_set_regs(
                     &mut reg_addr as (*mut u8) as (*const u8),
                     &mut tmp_pow_mode as (*mut u8) as (*const u8),
                     1u8,
-                );
-                _currentBlock = 8;
+                )?;
+                self.delay.delay_ms(BME680_POLL_PERIOD_MS);
             } else {
-                return rslt;
+                // TODO do while in Rust?
+                break;
             }
         }
+
+        /* Already in sleep */
+        if power_mode != PowerMode::SleepMode {
+            tmp_pow_mode = tmp_pow_mode & !BME680_MODE_MSK | power_mode.value();
+            self.bme680_set_regs(
+                &mut reg_addr as (*mut u8) as (*const u8),
+                &mut tmp_pow_mode as (*mut u8) as (*const u8),
+                1u8,
+            )?;
+        }
+        Ok(())
     }
 
-    pub fn get_sensor_mode(self) -> i8 {
-        let mut mode: u8;
-        let rslt = self.get_regs(BME680_CONF_T_P_MODE_ADDR, &mut mode as (*mut u8), 1u16);
-        self.power_mode = (mode as (i32) & BME680_MODE_MSK) as (u8);
-        rslt
+    pub fn get_sensor_mode(self) -> Result<PowerMode> {
+        let regs = self.get_regs_u8(BME680_CONF_T_P_MODE_ADDR)?;
+        let mode = regs & BME680_MODE_MSK;
+        Ok(PowerMode::from(mode))
     }
 
     pub fn bme680_set_profile_dur(self, mut duration: u16) {
@@ -576,101 +640,100 @@ where
         }
     }
 
-    pub fn get_sensor_data(self, mut data: *mut Bme680_field_data) -> i8 {
-        let mut rslt: i8;
-        rslt = self.read_field_data(data);
-        if rslt as (i32) == BME680_OK {
-            if (*data).status as (i32) & 0x80i32 != 0 {
-                self.new_fields = 1u8;
-            } else {
-                self.new_fields = 0u8;
-            }
-        }
-        rslt
-    }
-
-    fn get_calib_data(self) -> i8 {
-        let mut rslt: i8;
-        let mut coeff_array: [u8; 41] = 0i32 as ([u8; 41]);
-        let mut temp_var: u8 = 0u8;
-        rslt = self.get_regs(0x89u8, coeff_array.as_mut_ptr(), 25u16);
-        if rslt as (i32) == BME680_OK {
-            rslt = self.get_regs(0xe1u8, &mut coeff_array[25usize] as (*mut u8), 16u16);
-        }
-        self.calib.par_t1 = (coeff_array[34usize] as (u16) as (i32) << 8i32
-            | coeff_array[33usize] as (u16) as (i32)) as (u16);
-        self.calib.par_t2 = (coeff_array[2usize] as (u16) as (i32) << 8i32
-            | coeff_array[1usize] as (u16) as (i32)) as (i16);
-        self.calib.par_t3 = coeff_array[3usize] as (i8);
-        self.calib.par_p1 = (coeff_array[6usize] as (u16) as (i32) << 8i32
-            | coeff_array[5usize] as (u16) as (i32)) as (u16);
-        self.calib.par_p2 = (coeff_array[8usize] as (u16) as (i32) << 8i32
-            | coeff_array[7usize] as (u16) as (i32)) as (i16);
-        self.calib.par_p3 = coeff_array[9usize] as (i8);
-        self.calib.par_p4 = (coeff_array[12usize] as (u16) as (i32) << 8i32
-            | coeff_array[11usize] as (u16) as (i32)) as (i16);
-        self.calib.par_p5 = (coeff_array[14usize] as (u16) as (i32) << 8i32
-            | coeff_array[13usize] as (u16) as (i32)) as (i16);
-        self.calib.par_p6 = coeff_array[16usize] as (i8);
-        self.calib.par_p7 = coeff_array[15usize] as (i8);
-        self.calib.par_p8 = (coeff_array[20usize] as (u16) as (i32) << 8i32
-            | coeff_array[19usize] as (u16) as (i32)) as (i16);
-        self.calib.par_p9 = (coeff_array[22usize] as (u16) as (i32) << 8i32
-            | coeff_array[21usize] as (u16) as (i32)) as (i16);
-        self.calib.par_p10 = coeff_array[23usize];
-        self.calib.par_h1 = (coeff_array[27usize] as (u16) as (i32) << 4i32
-            | coeff_array[26usize] as (i32) & 0xfi32) as (u16);
-        self.calib.par_h2 = (coeff_array[25usize] as (u16) as (i32) << 4i32
-            | coeff_array[26usize] as (i32) >> 4i32) as (u16);
-        self.calib.par_h3 = coeff_array[28usize] as (i8);
-        self.calib.par_h4 = coeff_array[29usize] as (i8);
-        self.calib.par_h5 = coeff_array[30usize] as (i8);
-        self.calib.par_h6 = coeff_array[31usize];
-        self.calib.par_h7 = coeff_array[32usize] as (i8);
-        self.calib.par_gh1 = coeff_array[37usize] as (i8);
-        self.calib.par_gh2 = (coeff_array[36usize] as (u16) as (i32) << 8i32
-            | coeff_array[35usize] as (u16) as (i32)) as (i16);
-        self.calib.par_gh3 = coeff_array[38usize] as (i8);
-        if rslt as (i32) == BME680_OK {
-            rslt = self.get_regs(0x2u8, &mut temp_var as (*mut u8), 1u16);
-            self.calib.res_heat_range = ((temp_var as (i32) & 0x30i32) / 16i32) as (u8);
-            if rslt as (i32) == BME680_OK {
-                rslt = self.get_regs(0x0u8, &mut temp_var as (*mut u8), 1u16);
-                self.calib.res_heat_val = temp_var as (i8);
-                if rslt as (i32) == BME680_OK {
-                    rslt = self.get_regs(0x4u8, &mut temp_var as (*mut u8), 1u16);
-                }
-            }
-        }
-        self.calib.range_sw_err = ((temp_var as (i8) as (i32) & 0xf0i32) / 16i32) as (i8);
-        rslt
-    }
-
-    fn set_gas_config(self) -> i8 {
-        let mut rslt: i8;
-        let mut reg_addr: [u8; 2] = 0i32 as ([u8; 2]);
-        let mut reg_data: [u8; 2] = 0i32 as ([u8; 2]);
-        if self.power_mode as (i32) == 1i32 {
-            reg_addr[0usize] = 0x5au8;
-            reg_data[0usize] = self.calc_heater_res(self.gas_sett.heatr_temp);
-            reg_addr[1usize] = 0x64u8;
-            reg_data[1usize] = self.calc_heater_dur(self.gas_sett.heatr_dur);
-            self.gas_sett.nb_conv = 0u8;
+    /// @returns (FieldData, IsNewFields)
+    pub fn get_sensor_data(self) -> Result<(FieldData, FieldDataState)> {
+        let field_data = self.read_field_data()?;
+        if field_data.status & BME680_NEW_DATA_MSK != 0 {
+            // new fields
+            Ok((field_data, FieldDataState::NewData))
         } else {
-            rslt = 1i8;
+            Ok((field_data, FieldDataState::NoNewData))
         }
-        if rslt as (i32) == BME680_OK {
-            rslt = self.bme680_set_regs(
-                reg_addr.as_mut_ptr() as (*const u8),
-                reg_data.as_mut_ptr() as (*const u8),
-                2u8,
-            );
-        }
-        rslt
     }
 
-    fn get_gas_config(self) -> Result<Bme680_gas_sett> {
-        let mut gas_sett: Bme680_gas_sett = Default::default();
+    fn get_calib_data(self) -> Result<CalibData> {
+        let mut calib: CalibData = Default::default();
+        let mut coeff_array: [u8; BME680_COEFF_SIZE] = [0; BME680_COEFF_SIZE];
+
+        self.get_regs(
+            BME680_COEFF_ADDR1,
+            coeff_array.as_mut_ptr(),
+            BME680_COEFF_ADDR1_LEN,
+        )?;
+
+        self.get_regs(
+            BME680_COEFF_ADDR2,
+            &mut coeff_array[25usize] as (*mut u8),
+            BME680_COEFF_ADDR2_LEN,
+        )?;
+
+        calib.par_t1 = (coeff_array[34usize] as (u16) as (i32) << 8i32
+            | coeff_array[33usize] as (u16) as (i32)) as (u16);
+        calib.par_t2 = (coeff_array[2usize] as (u16) as (i32) << 8i32
+            | coeff_array[1usize] as (u16) as (i32)) as (i16);
+        calib.par_t3 = coeff_array[3usize] as (i8);
+        calib.par_p1 = (coeff_array[6usize] as (u16) as (i32) << 8i32
+            | coeff_array[5usize] as (u16) as (i32)) as (u16);
+        calib.par_p2 = (coeff_array[8usize] as (u16) as (i32) << 8i32
+            | coeff_array[7usize] as (u16) as (i32)) as (i16);
+        calib.par_p3 = coeff_array[9usize] as (i8);
+        calib.par_p4 = (coeff_array[12usize] as (u16) as (i32) << 8i32
+            | coeff_array[11usize] as (u16) as (i32)) as (i16);
+        calib.par_p5 = (coeff_array[14usize] as (u16) as (i32) << 8i32
+            | coeff_array[13usize] as (u16) as (i32)) as (i16);
+        calib.par_p6 = coeff_array[16usize] as (i8);
+        calib.par_p7 = coeff_array[15usize] as (i8);
+        calib.par_p8 = (coeff_array[20usize] as (u16) as (i32) << 8i32
+            | coeff_array[19usize] as (u16) as (i32)) as (i16);
+        calib.par_p9 = (coeff_array[22usize] as (u16) as (i32) << 8i32
+            | coeff_array[21usize] as (u16) as (i32)) as (i16);
+        calib.par_p10 = coeff_array[23usize];
+        calib.par_h1 = (coeff_array[27usize] as (u16) as (i32) << 4i32
+            | coeff_array[26usize] as (i32) & 0xfi32) as (u16);
+        calib.par_h2 = (coeff_array[25usize] as (u16) as (i32) << 4i32
+            | coeff_array[26usize] as (i32) >> 4i32) as (u16);
+        calib.par_h3 = coeff_array[28usize] as (i8);
+        calib.par_h4 = coeff_array[29usize] as (i8);
+        calib.par_h5 = coeff_array[30usize] as (i8);
+        calib.par_h6 = coeff_array[31usize];
+        calib.par_h7 = coeff_array[32usize] as (i8);
+        calib.par_gh1 = coeff_array[37usize] as (i8);
+        calib.par_gh2 = (coeff_array[36usize] as (u16) as (i32) << 8i32
+            | coeff_array[35usize] as (u16) as (i32)) as (i16);
+        calib.par_gh3 = coeff_array[38usize] as (i8);
+
+        calib.res_heat_range = (self.get_regs_u8(BME680_ADDR_RES_HEAT_RANGE_ADDR)? & 0x30) / 16;
+
+        calib.res_heat_val = self.get_regs_i8(BME680_ADDR_RES_HEAT_VAL_ADDR)?;
+
+        calib.range_sw_err = (self.get_regs_i8(BME680_ADDR_RANGE_SW_ERR_ADDR)? & 0xf0) / 16;
+
+        Ok(calib)
+    }
+
+    fn set_gas_config(&self, gas_sett: GasSett) -> Result<()> {
+        let mut reg_addr: [u8; 2] = [0; 2];
+        let mut reg_data: [u8; 2] = [0; 2];
+
+        if self.power_mode != PowerMode::ForcedMode {
+            return Err(Bme680Error::DefinePwrMode);
+        }
+
+        reg_addr[0] = BME680_RES_HEAT0_ADDR;
+        reg_data[0] = self.calc_heater_res(gas_sett.heatr_temp);
+        reg_addr[1] = BME680_GAS_WAIT0_ADDR;
+        reg_data[1] = self.calc_heater_dur(gas_sett.heatr_dur);
+
+        self.gas_sett.nb_conv = 0;
+        self.bme680_set_regs(
+            reg_addr.as_mut_ptr() as (*const u8),
+            reg_data.as_mut_ptr() as (*const u8),
+            2,
+        )
+    }
+
+    fn get_gas_config(self) -> Result<GasSett> {
+        let mut gas_sett: GasSett = Default::default();
         // TODO figure out if heat_temp and dur can be u8
         self.gas_sett.heatr_temp = self.get_regs_u8(BME680_ADDR_SENS_CONF_START)? as u16;
         self.gas_sett.heatr_dur = self.get_regs_u8(BME680_ADDR_GAS_CONF_START)? as u16;
@@ -678,35 +741,29 @@ where
     }
 
     fn calc_heater_res(self, mut temp: u16) -> u8 {
-        let mut heatr_res: u8;
-        let mut var1: i32;
-        let mut var2: i32;
-        let mut var3: i32;
-        let mut var4: i32;
-        let mut var5: i32;
-        let mut heatr_res_x100: i32;
+        // cap temperature
         if temp as (i32) > 400i32 {
             temp = 400u16;
         }
-        var1 = self.amb_temp as (i32) * self.calib.par_gh3 as (i32) / 1000i32 * 256i32;
-        var2 = (self.calib.par_gh1 as (i32) + 784i32)
+
+        let var1 = self.amb_temp as (i32) * self.calib.par_gh3 as (i32) / 1000i32 * 256i32;
+        let var2 = (self.calib.par_gh1 as (i32) + 784i32)
             * (((self.calib.par_gh2 as (i32) + 154009i32) * temp as (i32) * 5i32 / 100i32
                 + 3276800i32) / 10i32);
-        var3 = var1 + var2 / 2i32;
-        var4 = var3 / (self.calib.res_heat_range as (i32) + 4i32);
-        var5 = 131i32 * self.calib.res_heat_val as (i32) + 65536i32;
-        heatr_res_x100 = (var4 / var5 - 250i32) * 34i32;
-        heatr_res = ((heatr_res_x100 + 50i32) / 100i32) as (u8);
-        heatr_res
+        let var3 = var1 + var2 / 2i32;
+        let var4 = var3 / (self.calib.res_heat_range as (i32) + 4i32);
+        let var5 = 131i32 * self.calib.res_heat_val as (i32) + 65536i32;
+        let heatr_res_x100 = (var4 / var5 - 250i32) * 34i32;
+        ((heatr_res_x100 + 50i32) / 100i32) as (u8)
     }
 
-    fn calc_heater_dur(mut dur: u16) -> u8 {
+    fn calc_heater_dur(&self, mut dur: u16) -> u8 {
         let mut factor: u8 = 0u8;
         let mut durval: u8;
         if dur as (i32) >= 0xfc0i32 {
-            durval = 0xffu8;
+            durval = 0xffu8; // Max duration
         } else {
-            'loop1: loop {
+            loop {
                 if !(dur as (i32) > 0x3fi32) {
                     break;
                 }
@@ -837,11 +894,10 @@ where
         calc_gas_res
     }
 
-    fn read_field_data(self) -> Result<Bme680_field_data> {
+    fn read_field_data(self) -> Result<FieldData> {
         let mut _currentBlock;
-        let mut rslt: i8;
         let mut buff = [0, BME680_FIELD_LENGTH];
-        let mut data: Bme680_field_data = Default::default();
+        let mut data: FieldData = Default::default();
         let mut gas_range: u8;
         let mut adc_temp: u32;
         let mut adc_pres: u32;
@@ -885,20 +941,20 @@ where
         Err(Bme680Error::NoNewData)
     }
 
-    fn boundary_check(self, mut value: *mut u8, mut min: u8, mut max: u8) -> i8 {
-        let mut rslt: i8 = 0i8;
-        if value != 0i32 as (*mut ::std::os::raw::c_void) as (*mut u8) {
-            if *value as (i32) < min as (i32) {
-                *value = min;
-                self.info_msg = (self.info_msg as (i32) | 1i32) as (u8);
-            }
-            if *value as (i32) > max as (i32) {
-                *value = max;
-                self.info_msg = (self.info_msg as (i32) | 2i32) as (u8);
-            }
-        } else {
-            rslt = -1i8;
+    fn boundary_check(self, value: u8, min: u8, max: u8) -> Result<()> {
+        let info_msg: InfoMsg = Default::default();
+
+        if value < min {
+            info_msg |= InfoMsg::MIN_CORRECTION;
         }
-        rslt
+
+        if value > max {
+            info_msg |= InfoMsg::MAX_CORRECTION;
+        }
+
+        if info_msg.is_empty() {
+            return Err(Bme680Error::BoundaryCheckFailure(info_msg, min, max));
+        }
+        Ok(())
     }
 }
