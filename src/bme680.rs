@@ -104,10 +104,10 @@ pub const BME680_MEM_PAGE0: u8 = 0x10;
 pub const BME680_MEM_PAGE1: u8 = 0x00;
 
 /** Buffer length macro declaration */
-pub const BME680_TMP_BUFFER_LENGTH: u8 = 40;
-pub const BME680_REG_BUFFER_LENGTH: u8 = 6;
-pub const BME680_FIELD_DATA_LENGTH: u8 = 3;
-pub const BME680_GAS_REG_BUF_LENGTH: u8 = 20;
+pub const BME680_TMP_BUFFER_LENGTH: usize = 40;
+pub const BME680_REG_BUFFER_LENGTH: usize = 6;
+pub const BME680_FIELD_DATA_LENGTH: usize = 3;
+pub const BME680_GAS_REG_BUF_LENGTH: usize = 20;
 
 /* Settings selector */
 pub const BME680_OST_SEL: u16 = 1;
@@ -377,31 +377,25 @@ where
         }
     }
 
-    pub fn bme680_set_regs(self, reg_addr: u8, reg_data: *const u8, len: u8) -> Result<()> {
-        let mut tmp_buff = [0, BME680_TMP_BUFFER_LENGTH];
-
-        let mut index: u16;
-        if len > 0 && (len < BME680_TMP_BUFFER_LENGTH / 2) {
-            index = 0;
-            loop {
-                if !(index < len as u16) {
-                    break;
-                }
-                tmp_buff[(2 * index) as (usize)] = *reg_addr.offset(index as (isize));
-                tmp_buff[(2 * index + 1) as (usize)] = *reg_data.offset(index as (isize));
-                index = index + 1;
-            }
-
-            self.i2c
-                .write(reg_addr, &tmp_buff)
-                .map_err(|_| Bme680Error::CommunicationFailure)
-        } else {
-            Err(Bme680Error::InvalidLength)
+    pub fn bme680_set_regs(self, reg: &[(u8, u8)]) -> Result<()> {
+        if reg.is_empty() || reg.len() > (BME680_TMP_BUFFER_LENGTH / 2) as usize {
+            return Err(Bme680Error::InvalidLength);
         }
+
+        let tmp_buff = Vec::with_capacity(BME680_TMP_BUFFER_LENGTH);
+
+        for (reg_addr, reg_data) in reg {
+            tmp_buff.push(reg_addr.to_owned());
+            tmp_buff.push(reg_data.to_owned());
+        }
+
+        self.i2c
+            .write(self.dev_id, tmp_buff.as_slice())
+            .map_err(|_| Bme680Error::CommunicationFailure)
     }
 
     pub fn soft_reset(self) -> Result<()> {
-        self.bme680_set_regs(BME680_SOFT_RESET_ADDR, BME680_SOFT_RESET_CMD, 1u8)?;
+        self.bme680_set_regs(&[(BME680_SOFT_RESET_ADDR, BME680_SOFT_RESET_CMD)])?;
         self.delay.delay_ms(BME680_RESET_PERIOD);
         Ok(())
     }
@@ -414,9 +408,8 @@ where
     ) -> Result<()> {
         let mut reg_addr: u8;
         //        let mut data: u8 = 0u8;
-        let mut count: u8 = 0u8;
-        let mut reg_array: [u8; 6] = 0i32 as ([u8; 6]);
-        let mut data_array: [u8; 6] = 0i32 as ([u8; 6]);
+
+        let reg = Vec::with_capacity(BME680_REG_BUFFER_LENGTH);
         let mut intended_power_mode = self.power_mode;
 
         if desired_settings.contains(DesiredSensorSettings::GAS_MEAS_SEL) {
@@ -433,9 +426,7 @@ where
                 data = (data as (i32) & !0x1ci32 | self.tph_sett.filter as (i32) << 2i32 & 0x1ci32)
                     as (u8);
             }
-            reg_array[count as (usize)] = reg_addr;
-            data_array[count as (usize)] = data;
-            count = (count as (i32) + 1) as (u8);
+            reg.push((reg_addr, data));
         }
 
         if desired_settings.contains(DesiredSensorSettings::HCNTRL_SEL) {
@@ -443,9 +434,7 @@ where
             reg_addr = 0x70u8;
             let mut data = self.get_regs_u8(reg_addr)?;
             data = (data as (i32) & !0x8i32 | self.gas_sett.heatr_ctrl as (i32) & 0x8i32) as (u8);
-            reg_array[count as (usize)] = reg_addr;
-            data_array[count as (usize)] = data;
-            count = (count as (i32) + 1) as (u8);
+            reg.push((reg_addr, data));
         }
 
         if desired_settings
@@ -465,9 +454,7 @@ where
                     as (u8);
             }
 
-            reg_array[count as (usize)] = reg_addr;
-            data_array[count as (usize)] = data;
-            count = (count as (i32) + 1) as (u8);
+            reg.push((reg_addr, data));
         }
 
         if desired_settings.contains(DesiredSensorSettings::OSH_SEL) {
@@ -475,9 +462,6 @@ where
             reg_addr = 0x72u8;
             let mut data = self.get_regs_u8(reg_addr)?;
             data = (data as (i32) & !0x7i32 | self.tph_sett.os_hum as (i32) & 0x7i32) as (u8);
-            reg_array[count as (usize)] = reg_addr;
-            data_array[count as (usize)] = data;
-            count = (count as (i32) + 1) as (u8);
         }
 
         if desired_settings
@@ -497,16 +481,10 @@ where
                 data = (data as (i32) & !0xfi32 | self.gas_sett.nb_conv as (i32) & 0xfi32) as (u8);
             }
 
-            reg_array[count as (usize)] = reg_addr;
-            data_array[count as (usize)] = data;
-            count = (count as (i32) + 1) as (u8);
+            reg.push((reg_addr, data));
         }
 
-        self.bme680_set_regs(
-            reg_array.as_mut_ptr() as (*const u8),
-            data_array.as_mut_ptr() as (*const u8),
-            count,
-        )?;
+        self.bme680_set_regs(reg.as_slice())?;
 
         self.power_mode = intended_power_mode;
         Ok(())
@@ -515,7 +493,7 @@ where
     // TODO replace desired_settings with proper flags type see lib.rs
     pub fn get_sensor_settings(self, mut desired_settings: u16) -> Result<SensorSettings> {
         let mut reg_addr: u8 = 0x70u8;
-        let mut data_array: [u8; 6] = 0i32 as ([u8; 6]);
+        let mut data_array: [u8; 6] = [0; 6];
         let mut sensor_settings = Default::default();
 
         let data_array = self.get_regs(reg_addr, data_array.as_mut_ptr(), 6u16)?;
@@ -561,11 +539,7 @@ where
 
         /* Call repeatedly until in sleep */
         loop {
-            self.get_regs(
-                BME680_CONF_T_P_MODE_ADDR,
-                &mut tmp_pow_mode as (*mut u8),
-                1u16,
-            )?;
+            let tmp_pow_mode = self.get_regs_u8(BME680_CONF_T_P_MODE_ADDR)?;
 
             /* Put to sleep before changing mode */
             pow_mode = tmp_pow_mode & BME680_MODE_MSK;
@@ -573,11 +547,8 @@ where
             if power_mode != PowerMode::SleepMode {
                 /* Set to sleep*/
                 tmp_pow_mode = tmp_pow_mode & !BME680_MODE_MSK;
-                self.bme680_set_regs(
-                    &mut reg_addr as (*mut u8) as (*const u8),
-                    &mut tmp_pow_mode as (*mut u8) as (*const u8),
-                    1u8,
-                )?;
+                let reg = vec!((reg_addr, tmp_pow_mode));
+                self.bme680_set_regs(reg.as_slice())?;
                 self.delay.delay_ms(BME680_POLL_PERIOD_MS);
             } else {
                 // TODO do while in Rust?
@@ -588,11 +559,7 @@ where
         /* Already in sleep */
         if power_mode != PowerMode::SleepMode {
             tmp_pow_mode = tmp_pow_mode & !BME680_MODE_MSK | power_mode.value();
-            self.bme680_set_regs(
-                &mut reg_addr as (*mut u8) as (*const u8),
-                &mut tmp_pow_mode as (*mut u8) as (*const u8),
-                1u8,
-            )?;
+            self.bme680_set_regs(&[(reg_addr, tmp_pow_mode)])?;
         }
         Ok(())
     }
@@ -712,24 +679,17 @@ where
     }
 
     fn set_gas_config(&self, gas_sett: GasSett) -> Result<()> {
-        let mut reg_addr: [u8; 2] = [0; 2];
-        let mut reg_data: [u8; 2] = [0; 2];
+        let reg = Vec::with_capacity(2);
 
         if self.power_mode != PowerMode::ForcedMode {
             return Err(Bme680Error::DefinePwrMode);
         }
 
-        reg_addr[0] = BME680_RES_HEAT0_ADDR;
-        reg_data[0] = self.calc_heater_res(gas_sett.heatr_temp);
-        reg_addr[1] = BME680_GAS_WAIT0_ADDR;
-        reg_data[1] = self.calc_heater_dur(gas_sett.heatr_dur);
+        reg.push((BME680_RES_HEAT0_ADDR, self.calc_heater_res(gas_sett.heatr_temp)));
+        reg.push((BME680_GAS_WAIT0_ADDR, self.calc_heater_dur(gas_sett.heatr_dur)));
 
         self.gas_sett.nb_conv = 0;
-        self.bme680_set_regs(
-            reg_addr.as_mut_ptr() as (*const u8),
-            reg_data.as_mut_ptr() as (*const u8),
-            2,
-        )
+        self.bme680_set_regs(reg.as_slice())
     }
 
     fn get_gas_config(self) -> Result<GasSett> {
