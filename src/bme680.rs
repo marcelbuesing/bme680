@@ -429,6 +429,7 @@ where
         let power_mode = self.power_mode;
         self.bme680_set_sensor_mode(power_mode)?;
 
+        /* Selecting the filter */
         if desired_settings.contains(DesiredSensorSettings::FILTER_SEL) {
             let tph_sett_filter = boundary_check(self.tph_sett.filter, 0, 7)?;
             reg_addr = 0x75u8;
@@ -451,6 +452,7 @@ where
             reg.push((reg_addr, data));
         }
 
+        /* Selecting heater T,P oversampling for the sensor */
         if desired_settings
             .contains(DesiredSensorSettings::OST_SEL | DesiredSensorSettings::OSP_SEL)
         {
@@ -472,13 +474,16 @@ where
             reg.push((reg_addr, data));
         }
 
+        /* Selecting humidity oversampling for the sensor */
         if desired_settings.contains(DesiredSensorSettings::OSH_SEL) {
             let tph_sett_os_hum = boundary_check(self.tph_sett.os_hum, 0, 5)?;
             reg_addr = 0x72u8;
             let mut data = self.get_regs_u8(reg_addr)?;
             data = (data as (i32) & !0x7i32 | tph_sett_os_hum as (i32) & 0x7i32) as (u8);
+            reg.push((reg_addr, data));
         }
 
+        /* Selecting the runGas and NB conversion settings for the sensor */
         if desired_settings
             .contains(DesiredSensorSettings::RUN_GAS_SEL | DesiredSensorSettings::NBCONV_SEL)
         {
@@ -501,6 +506,7 @@ where
 
         self.bme680_set_regs(reg.as_slice())?;
 
+        /* Restore previous intended power mode */
         self.power_mode = intended_power_mode;
         Ok(())
     }
@@ -510,8 +516,6 @@ where
         let reg_addr: u8 = 0x70u8;
         let mut data_array: [u8; BME680_REG_BUFFER_LENGTH] = [0; BME680_REG_BUFFER_LENGTH];
         let mut sensor_settings: SensorSettings = Default::default();
-
-        let tph_sett: TphSett = Default::default();
 
         self.i2c.read(reg_addr, &mut data_array).map_err(|_| Bme680Error::CommunicationFailure)?;
 
@@ -548,10 +552,9 @@ where
         Ok(sensor_settings)
     }
 
-    pub fn bme680_set_sensor_mode(&mut self, power_mode: PowerMode) -> Result<()> {
-        let mut tmp_pow_mode: u8 = 0;
-        let mut pow_mode: u8 = 0u8;
-        let power_mode = PowerMode::SleepMode;
+    pub fn bme680_set_sensor_mode(&mut self, target_power_mode: PowerMode) -> Result<()> {
+        let mut tmp_pow_mode: u8;
+        let mut current_power_mode: PowerMode;
         let reg_addr: u8 = 0x74u8;
 
         /* Call repeatedly until in sleep */
@@ -559,9 +562,8 @@ where
             tmp_pow_mode = self.get_regs_u8(BME680_CONF_T_P_MODE_ADDR)?;
 
             /* Put to sleep before changing mode */
-            pow_mode = tmp_pow_mode & BME680_MODE_MSK;
-
-            if power_mode != PowerMode::SleepMode {
+            current_power_mode = PowerMode::from(tmp_pow_mode & BME680_MODE_MSK);
+            if current_power_mode != PowerMode::SleepMode {
                 /* Set to sleep*/
                 tmp_pow_mode = tmp_pow_mode & !BME680_MODE_MSK;
                 let reg = vec!((reg_addr, tmp_pow_mode));
@@ -574,8 +576,8 @@ where
         }
 
         /* Already in sleep */
-        if power_mode != PowerMode::SleepMode {
-            tmp_pow_mode = tmp_pow_mode & !BME680_MODE_MSK | power_mode.value();
+        if current_power_mode != PowerMode::SleepMode {
+            tmp_pow_mode = tmp_pow_mode & !BME680_MODE_MSK | target_power_mode.value();
             self.bme680_set_regs(&[(reg_addr, tmp_pow_mode)])?;
         }
         Ok(())
@@ -605,23 +607,20 @@ where
     }
 
     pub fn get_profile_dur(&self, tph_sett: TphSett, gas_sett: GasSett) -> Result<u16> {
-        let mut duration: u16 = 0;
-        let mut tph_dur: u32;
-        let mut meas_cycles: u32;
         let os_to_meas_cycles: [u8; 6] = [0u8, 1u8, 2u8, 4u8, 8u8, 16u8];
         // TODO check if the following unwrap_ors do not change behaviour
-        meas_cycles = os_to_meas_cycles[tph_sett.os_temp.unwrap_or(0) as (usize)] as (u32);
+        let mut meas_cycles = os_to_meas_cycles[tph_sett.os_temp.unwrap_or(0) as (usize)] as (u32);
         meas_cycles =
             meas_cycles.wrapping_add(os_to_meas_cycles[tph_sett.os_pres.unwrap_or(0) as (usize)] as (u32));
         meas_cycles =
             meas_cycles.wrapping_add(os_to_meas_cycles[tph_sett.os_hum.unwrap_or(0) as (usize)] as (u32));
-        tph_dur = meas_cycles.wrapping_mul(1963u32);
+        let mut tph_dur = meas_cycles.wrapping_mul(1963u32);
         tph_dur = tph_dur.wrapping_add(477u32.wrapping_mul(4u32));
         tph_dur = tph_dur.wrapping_add(477u32.wrapping_mul(5u32));
         tph_dur = tph_dur.wrapping_add(500u32);
         tph_dur = tph_dur.wrapping_div(1000u32);
         tph_dur = tph_dur.wrapping_add(1u32);
-        duration = tph_dur as (u16);
+        let mut duration = tph_dur as (u16);
         if gas_sett.run_gas.unwrap_or(0) != 0 {
             duration = duration + gas_sett.heatr_dur.ok_or(Bme680Error::NulltPtr)?;
         }
@@ -767,19 +766,15 @@ where
     }
 
     fn calc_pressure(&self, pres_adc: u32) -> u32 {
-        let mut var1: i32 = 0i32;
-        let mut var2: i32 = 0i32;
-        let mut var3: i32 = 0i32;
-        let mut pressure_comp: i32 = 0i32;
-        var1 = (self.calib.t_fine >> 1i32) - 64000i32;
-        var2 = ((var1 >> 2i32) * (var1 >> 2i32) >> 11i32) * self.calib.par_p6 as (i32) >> 2i32;
+        let mut var1 = (self.calib.t_fine >> 1i32) - 64000i32;
+        let mut var2 = ((var1 >> 2i32) * (var1 >> 2i32) >> 11i32) * self.calib.par_p6 as (i32) >> 2i32;
         var2 = var2 + (var1 * self.calib.par_p5 as (i32) << 1i32);
         var2 = (var2 >> 2i32) + (self.calib.par_p4 as (i32) << 16i32);
         var1 = (((var1 >> 2i32) * (var1 >> 2i32) >> 13i32) * (self.calib.par_p3 as (i32) << 5i32)
             >> 3i32) + (self.calib.par_p2 as (i32) * var1 >> 1i32);
         var1 = var1 >> 18i32;
         var1 = (32768i32 + var1) * self.calib.par_p1 as (i32) >> 15i32;
-        pressure_comp = 1048576u32.wrapping_sub(pres_adc) as (i32);
+        let mut pressure_comp = 1048576u32.wrapping_sub(pres_adc) as (i32);
         pressure_comp = ((pressure_comp - (var2 >> 12i32)) as (u32)).wrapping_mul(3125u32) as (i32);
         if pressure_comp >= 0x40000000i32 {
             pressure_comp = ((pressure_comp as (u32)).wrapping_div(var1 as (u32)) << 1i32) as (i32);
@@ -789,7 +784,7 @@ where
         var1 = self.calib.par_p9 as (i32)
             * ((pressure_comp >> 3i32) * (pressure_comp >> 3i32) >> 13i32) >> 12i32;
         var2 = (pressure_comp >> 2i32) * self.calib.par_p8 as (i32) >> 13i32;
-        var3 = (pressure_comp >> 8i32) * (pressure_comp >> 8i32) * (pressure_comp >> 8i32)
+        let var3 = (pressure_comp >> 8i32) * (pressure_comp >> 8i32) * (pressure_comp >> 8i32)
             * self.calib.par_p10 as (i32) >> 17i32;
         pressure_comp =
             pressure_comp + (var1 + var2 + var3 + (self.calib.par_p7 as (i32) << 7i32) >> 4i32);
