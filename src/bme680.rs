@@ -224,13 +224,13 @@ impl Clone for CalibData {
     }
 }
 
-#[derive(Copy)]
+#[derive(Default, Copy)]
 #[repr(C)]
 pub struct TphSett {
-    pub os_hum: u8,
-    pub os_temp: u8,
-    pub os_pres: u8,
-    pub filter: u8,
+    pub os_hum: Option<u8>,
+    pub os_temp: Option<u8>,
+    pub os_pres: Option<u8>,
+    pub filter: Option<u8>,
 }
 
 impl Clone for TphSett {
@@ -242,11 +242,11 @@ impl Clone for TphSett {
 #[derive(Default, Copy)]
 #[repr(C)]
 pub struct GasSett {
-    pub nb_conv: u8,
-    pub heatr_ctrl: u8,
-    pub run_gas: u8,
-    pub heatr_temp: u16,
-    pub heatr_dur: u16,
+    pub nb_conv: Option<u8>,
+    pub heatr_ctrl: Option<u8>,
+    pub run_gas: Option<u8>,
+    pub heatr_temp: Option<u16>,
+    pub heatr_dur: Option<u16>,
 }
 
 impl Clone for GasSett {
@@ -293,8 +293,8 @@ bitflags! {
 
 #[derive(Default)]
 pub struct SensorSettings {
-    gas_sett: Option<GasSett>,
-    tph_sett: Option<TphSett>,
+    gas_sett: GasSett,
+    tph_sett: TphSett,
 }
 
 bitflags! {
@@ -407,7 +407,6 @@ where
         gas_sett: Option<GasSett>,
     ) -> Result<()> {
         let mut reg_addr: u8;
-        //        let mut data: u8 = 0u8;
 
         let reg = Vec::with_capacity(BME680_REG_BUFFER_LENGTH);
         let mut intended_power_mode = self.power_mode;
@@ -419,38 +418,41 @@ where
         self.bme680_set_sensor_mode(self.power_mode)?;
 
         if desired_settings.contains(DesiredSensorSettings::FILTER_SEL) {
-            self.boundary_check(self.tph_sett.filter, 0, 7)?;
+            let tph_sett_filter = self.boundary_check(self.tph_sett.filter, 0, 7)?;
             reg_addr = 0x75u8;
             let mut data = self.get_regs_u8(reg_addr)?;
+
+            // TODO duplicate check of condition ?
             if desired_settings.contains(DesiredSensorSettings::FILTER_SEL) {
-                data = (data as (i32) & !0x1ci32 | self.tph_sett.filter as (i32) << 2i32 & 0x1ci32)
+                data = (data as (i32) & !0x1ci32 |tph_sett_filter as (i32) << 2i32 & 0x1ci32)
                     as (u8);
             }
             reg.push((reg_addr, data));
         }
 
         if desired_settings.contains(DesiredSensorSettings::HCNTRL_SEL) {
-            self.boundary_check(self.gas_sett.heatr_ctrl, 0x0u8, 0x8u8)?;
+            let gas_sett_heatr_ctrl = self.boundary_check(self.gas_sett.heatr_ctrl, 0x0u8, 0x8u8)?;
             reg_addr = 0x70u8;
             let mut data = self.get_regs_u8(reg_addr)?;
-            data = (data as (i32) & !0x8i32 | self.gas_sett.heatr_ctrl as (i32) & 0x8i32) as (u8);
+            data = (data as (i32) & !0x8i32 | gas_sett_heatr_ctrl  as (i32) & 0x8) as (u8) ;
             reg.push((reg_addr, data));
         }
 
         if desired_settings
             .contains(DesiredSensorSettings::OST_SEL | DesiredSensorSettings::OSP_SEL)
         {
-            self.boundary_check(self.tph_sett.os_temp, 0, 5)?;
             reg_addr = 0x74u8;
             let mut data = self.get_regs_u8(reg_addr)?;
 
             if desired_settings.contains(DesiredSensorSettings::OST_SEL) {
-                data = (data as (i32) & !0xe0i32 | self.tph_sett.os_temp as (i32) << 5i32 & 0xe0i32)
+                let tph_sett_os_temp = self.boundary_check(self.tph_sett.os_temp, 0, 5)?;
+                data = (data as (i32) & !0xe0i32 | tph_sett_os_temp as (i32) << 5i32 & 0xe0i32)
                     as (u8);
             }
 
             if desired_settings.contains(DesiredSensorSettings::OSP_SEL) {
-                data = (data as (i32) & !0x1ci32 | self.tph_sett.os_pres as (i32) << 2i32 & 0x1ci32)
+                let tph_sett_os_pres = self.tph_sett.os_temp.ok_or(Bme680Error::NulltPtr)?;
+                data = (data as (i32) & !0x1ci32 | tph_sett_os_pres as (i32) << 2i32 & 0x1ci32)
                     as (u8);
             }
 
@@ -458,27 +460,27 @@ where
         }
 
         if desired_settings.contains(DesiredSensorSettings::OSH_SEL) {
-            self.boundary_check(self.tph_sett.os_hum, 0, 5)?;
+            let tph_sett_os_hum = self.boundary_check(self.tph_sett.os_hum, 0, 5)?;
             reg_addr = 0x72u8;
             let mut data = self.get_regs_u8(reg_addr)?;
-            data = (data as (i32) & !0x7i32 | self.tph_sett.os_hum as (i32) & 0x7i32) as (u8);
+            data = (data as (i32) & !0x7i32 | tph_sett_os_hum as (i32) & 0x7i32) as (u8);
         }
 
         if desired_settings
             .contains(DesiredSensorSettings::RUN_GAS_SEL | DesiredSensorSettings::NBCONV_SEL)
         {
-            self.boundary_check(self.gas_sett.run_gas, 0, 1)?;
-            self.boundary_check(self.gas_sett.nb_conv, 0, 10)?;
             reg_addr = 0x71u8;
             let mut data = self.get_regs_u8(reg_addr)?;
 
             if desired_settings.contains(DesiredSensorSettings::RUN_GAS_SEL) {
-                data = (data as (i32) & !0x10i32 | self.gas_sett.run_gas as (i32) << 4i32 & 0x10i32)
+                let gas_sett_run_gas = self.boundary_check(self.gas_sett.run_gas, 0, 1)?;
+                data = (data as (i32) & !0x10i32 | gas_sett_run_gas as (i32) << 4i32 & 0x10i32)
                     as (u8);
             }
 
             if desired_settings.contains(DesiredSensorSettings::NBCONV_SEL) {
-                data = (data as (i32) & !0xfi32 | self.gas_sett.nb_conv as (i32) & 0xfi32) as (u8);
+                let gas_sett_nb_conv = self.boundary_check(self.gas_sett.nb_conv, 0, 10)?;
+                data = (data as (i32) & !0xfi32 | gas_sett_nb_conv as (i32) & 0xfi32) as (u8);
             }
 
             reg.push((reg_addr, data));
@@ -493,39 +495,41 @@ where
     // TODO replace desired_settings with proper flags type see lib.rs
     pub fn get_sensor_settings(self, mut desired_settings: u16) -> Result<SensorSettings> {
         let mut reg_addr: u8 = 0x70u8;
-        let mut data_array: [u8; 6] = [0; 6];
-        let mut sensor_settings = Default::default();
+        let mut data_array: [u8; BME680_REG_BUFFER_LENGTH] = [0; BME680_REG_BUFFER_LENGTH];
+        let mut sensor_settings: SensorSettings = Default::default();
 
-        let data_array = self.get_regs(reg_addr, data_array.as_mut_ptr(), 6u16)?;
+        let mut tph_sett: TphSett = Default::default();
 
-        if desired_settings as (i32) & 8i32 != 0 {
-            sensor_settings.gas_sett = Some(self.get_gas_config()?);
+        self.i2c.read(reg_addr, &mut data_array).map_err(|_| Bme680Error::CommunicationFailure)?;
+
+        if desired_settings & BME680_GAS_MEAS_SEL != 0 {
+            sensor_settings.gas_sett = self.get_gas_config()?;
         }
 
-        if desired_settings as (i32) & 16i32 != 0 {
+        if desired_settings & BME680_FILTER_SEL != 0 {
             sensor_settings.tph_sett.filter =
-                ((data_array[5usize] as (i32) & 0x1ci32) >> 2i32) as (u8);
+               Some(((data_array[5usize] as (i32) & 0x1ci32) >> 2i32) as (u8));
         }
 
-        if desired_settings as (i32) & (1i32 | 2i32) != 0 {
+        if desired_settings & (BME680_OST_SEL | BME680_OSP_SEL) != 0 {
             sensor_settings.tph_sett.os_temp =
-                ((data_array[4usize] as (i32) & 0xe0i32) >> 5i32) as (u8);
+                Some(((data_array[4usize] as (i32) & 0xe0i32) >> 5i32) as (u8));
             sensor_settings.tph_sett.os_pres =
-                ((data_array[4usize] as (i32) & 0x1ci32) >> 2i32) as (u8);
+                Some(((data_array[4usize] as (i32) & 0x1ci32) >> 2i32) as (u8));
         }
 
-        if desired_settings as (i32) & 4i32 != 0 {
-            sensor_settings.tph_sett.os_hum = (data_array[2usize] as (i32) & 0x7i32) as (u8);
+        if desired_settings & BME680_OSH_SEL != 0 {
+            sensor_settings.tph_sett.os_hum = Some((data_array[2usize] as (i32) & 0x7i32) as (u8));
         }
 
-        if desired_settings as (i32) & 32i32 != 0 {
-            sensor_settings.gas_sett.heatr_ctrl = (data_array[0usize] as (i32) & 0x8i32) as (u8);
+        if desired_settings & BME680_HCNTRL_SEL != 0 {
+            sensor_settings.gas_sett.heatr_ctrl = Some((data_array[0usize] as (i32) & 0x8i32) as (u8));
         }
 
-        if desired_settings as (i32) & (64i32 | 128i32) != 0 {
-            sensor_settings.gas_sett.nb_conv = (data_array[1usize] as (i32) & 0xfi32) as (u8);
+        if desired_settings & (BME680_RUN_GAS_SEL | BME680_NBCONV_SEL) != 0 {
+            sensor_settings.gas_sett.nb_conv = Some((data_array[1usize] as (i32) & 0xfi32) as (u8));
             sensor_settings.gas_sett.run_gas =
-                ((data_array[1usize] as (i32) & 0x10i32) >> 4i32) as (u8);
+                Some(((data_array[1usize] as (i32) & 0x10i32) >> 4i32) as (u8));
         }
 
         Ok(sensor_settings)
@@ -570,41 +574,45 @@ where
         Ok(PowerMode::from(mode))
     }
 
-    pub fn bme680_set_profile_dur(self, mut duration: u16) {
+    pub fn bme680_set_profile_dur(&self, tph_sett: TphSett, mut duration: u16) {
         let mut os_to_meas_cycles: [u8; 6] = [0u8, 1u8, 2u8, 4u8, 8u8, 16u8];
-        let mut meas_cycles = os_to_meas_cycles[self.tph_sett.os_temp as (usize)] as (u32);
+        // TODO check if the following unwrap_ors do not change behaviour
+        let mut meas_cycles = os_to_meas_cycles[tph_sett.os_temp.unwrap_or(0) as (usize)] as (u32);
         meas_cycles =
-            meas_cycles.wrapping_add(os_to_meas_cycles[self.tph_sett.os_pres as (usize)] as (u32));
+            meas_cycles.wrapping_add(os_to_meas_cycles[tph_sett.os_pres.unwrap_or(0) as (usize)] as (u32));
         meas_cycles =
-            meas_cycles.wrapping_add(os_to_meas_cycles[self.tph_sett.os_hum as (usize)] as (u32));
+            meas_cycles.wrapping_add(os_to_meas_cycles[tph_sett.os_hum.unwrap_or(0) as (usize)] as (u32));
         let mut tph_dur = meas_cycles.wrapping_mul(1963u32);
         tph_dur = tph_dur.wrapping_add(477u32.wrapping_mul(4u32));
         tph_dur = tph_dur.wrapping_add(477u32.wrapping_mul(5u32));
         tph_dur = tph_dur.wrapping_add(500u32);
         tph_dur = tph_dur.wrapping_div(1000u32);
         tph_dur = tph_dur.wrapping_add(1u32);
-        self.gas_sett.heatr_dur = (duration as (i32) - tph_dur as (u16) as (i32)) as (u16);
+        self.gas_sett.heatr_dur = Some((duration as (i32) - tph_dur as (u16) as (i32)) as (u16));
     }
 
-    pub fn get_profile_dur(self, mut duration: *mut u16) {
+    pub fn get_profile_dur(&self, tph_sett: TphSett, gas_sett: GasSett) -> Result<u16> {
+        let mut duration: u16 = 0;
         let mut tph_dur: u32;
         let mut meas_cycles: u32;
         let mut os_to_meas_cycles: [u8; 6] = [0u8, 1u8, 2u8, 4u8, 8u8, 16u8];
-        meas_cycles = os_to_meas_cycles[self.tph_sett.os_temp as (usize)] as (u32);
+        // TODO check if the following unwrap_ors do not change behaviour
+        meas_cycles = os_to_meas_cycles[tph_sett.os_temp.unwrap_or(0) as (usize)] as (u32);
         meas_cycles =
-            meas_cycles.wrapping_add(os_to_meas_cycles[self.tph_sett.os_pres as (usize)] as (u32));
+            meas_cycles.wrapping_add(os_to_meas_cycles[tph_sett.os_pres.unwrap_or(0) as (usize)] as (u32));
         meas_cycles =
-            meas_cycles.wrapping_add(os_to_meas_cycles[self.tph_sett.os_hum as (usize)] as (u32));
+            meas_cycles.wrapping_add(os_to_meas_cycles[tph_sett.os_hum.unwrap_or(0) as (usize)] as (u32));
         tph_dur = meas_cycles.wrapping_mul(1963u32);
         tph_dur = tph_dur.wrapping_add(477u32.wrapping_mul(4u32));
         tph_dur = tph_dur.wrapping_add(477u32.wrapping_mul(5u32));
         tph_dur = tph_dur.wrapping_add(500u32);
         tph_dur = tph_dur.wrapping_div(1000u32);
         tph_dur = tph_dur.wrapping_add(1u32);
-        *duration = tph_dur as (u16);
-        if self.gas_sett.run_gas != 0 {
-            *duration = (*duration as (i32) + self.gas_sett.heatr_dur as (i32)) as (u16);
+        duration = tph_dur as (u16);
+        if gas_sett.run_gas.unwrap_or(0) != 0 {
+            duration = duration + gas_sett.heatr_dur.ok_or(Bme680Error::NulltPtr)?;
         }
+        Ok(duration)
     }
 
     /// @returns (FieldData, IsNewFields)
@@ -901,8 +909,11 @@ where
         Err(Bme680Error::NoNewData)
     }
 
-    fn boundary_check(self, value: u8, min: u8, max: u8) -> Result<()> {
+    fn boundary_check(self, value: Option<u8>, min: u8, max: u8) -> Result<u8> {
         let info_msg: InfoMsg = Default::default();
+
+        // TODO give the nullptr here a different name
+        let value = value.ok_or(Bme680Error::NulltPtr)?;
 
         if value < min {
             info_msg |= InfoMsg::MIN_CORRECTION;
@@ -915,6 +926,6 @@ where
         if info_msg.is_empty() {
             return Err(Bme680Error::BoundaryCheckFailure(info_msg, min, max));
         }
-        Ok(())
+        Ok(value)
     }
 }
