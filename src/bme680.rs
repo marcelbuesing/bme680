@@ -630,17 +630,15 @@ where
         let mut calib: CalibData = Default::default();
         let mut coeff_array: [u8; BME680_COEFF_SIZE] = [0; BME680_COEFF_SIZE];
 
-        self.get_regs(
+        self.i2c.read(
             BME680_COEFF_ADDR1,
-            coeff_array.as_mut_ptr(),
-            BME680_COEFF_ADDR1_LEN,
-        )?;
+            &mut coeff_array,
+        ).map_err(|_| Bme680Error::CommunicationFailure)?;
 
-        self.get_regs(
+        self.i2c.read(
             BME680_COEFF_ADDR2,
-            &mut coeff_array[25usize] as (*mut u8),
-            BME680_COEFF_ADDR2_LEN,
-        )?;
+            &mut coeff_array,
+        ).map_err(|_| Bme680Error::CommunicationFailure)?;
 
         calib.par_t1 = (coeff_array[34usize] as (u16) as (i32) << 8i32
             | coeff_array[33usize] as (u16) as (i32)) as (u16);
@@ -693,18 +691,20 @@ where
             return Err(Bme680Error::DefinePwrMode);
         }
 
-        reg.push((BME680_RES_HEAT0_ADDR, self.calc_heater_res(gas_sett.heatr_temp)));
-        reg.push((BME680_GAS_WAIT0_ADDR, self.calc_heater_dur(gas_sett.heatr_dur)));
+        // TODO check whether unwrap_or changes behaviour
+        reg.push((BME680_RES_HEAT0_ADDR, self.calc_heater_res(gas_sett.heatr_temp.unwrap_or(0))));
+        reg.push((BME680_GAS_WAIT0_ADDR, self.calc_heater_dur(gas_sett.heatr_dur.unwrap_or(0))));
 
-        self.gas_sett.nb_conv = 0;
+        self.gas_sett.nb_conv = Some(0);
         self.bme680_set_regs(reg.as_slice())
     }
 
     fn get_gas_config(self) -> Result<GasSett> {
+        // TODO move both GasSett fields to new struct
         let mut gas_sett: GasSett = Default::default();
         // TODO figure out if heat_temp and dur can be u8
-        self.gas_sett.heatr_temp = self.get_regs_u8(BME680_ADDR_SENS_CONF_START)? as u16;
-        self.gas_sett.heatr_dur = self.get_regs_u8(BME680_ADDR_GAS_CONF_START)? as u16;
+        self.gas_sett.heatr_temp = Some(self.get_regs_u8(BME680_ADDR_SENS_CONF_START)? as u16);
+        self.gas_sett.heatr_dur = Some(self.get_regs_u8(BME680_ADDR_GAS_CONF_START)? as u16);
         Ok(gas_sett)
     }
 
@@ -863,7 +863,6 @@ where
     }
 
     fn read_field_data(self) -> Result<FieldData> {
-        let mut _currentBlock;
         let mut buff = [0, BME680_FIELD_LENGTH];
         let mut data: FieldData = Default::default();
         let mut gas_range: u8;
@@ -874,7 +873,8 @@ where
         let mut tries: u8 = 10u8;
 
         loop {
-            self.get_regs(BME680_FIELD0_ADDR, buff.as_mut_ptr(), BME680_FIELD_LENGTH)?;
+            self.i2c.read(BME680_FIELD0_ADDR, &mut buff)
+                .map_err(|_| Bme680Error::CommunicationFailure)?;
             data.status = buff[0] & BME680_NEW_DATA_MSK;
             data.gas_index = buff[0] & BME680_GAS_INDEX_MSK;;
             data.meas_index = buff[1];
