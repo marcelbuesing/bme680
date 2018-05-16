@@ -1,14 +1,9 @@
 [package]
 name = "bme680-rs"
 version = "0.1.0"
-build = "build.rs"
 authors = ["marcelbuesing <buesing.marcel@googlemail.com>"]
 
 [dependencies]
+bitflags = "1.0"
 byteorder = "1.2"
 embedded-hal = "0.1"
-
-[build-dependencies]
-bindgen = "0.35"
-bitflags = "1.0"
-gcc = "0.3"
