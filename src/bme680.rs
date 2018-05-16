@@ -1,7 +1,5 @@
-use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
-
 use hal::blocking::delay::DelayMs;
-use hal::blocking::i2c::{Read, Write, WriteRead};
+use hal::blocking::i2c::{Read, Write};
 use std::convert::TryFrom;
 
 use std::result;
@@ -215,7 +213,7 @@ pub struct CalibData {
     pub t_fine: i32,
     pub res_heat_range: u8,
     pub res_heat_val: i8,
-    pub range_sw_err: i8,
+    pub range_sw_err: u8,
 }
 
 impl Clone for CalibData {
@@ -336,6 +334,26 @@ pub struct Bme680_dev<I2C, D> {
     pub info_msg: u8,
 }
 
+fn boundary_check(value: Option<u8>, min: u8, max: u8) -> Result<u8> {
+    let mut info_msg: InfoMsg = Default::default();
+
+    // TODO give the nullptr here a different name
+    let value = value.ok_or(Bme680Error::NulltPtr)?;
+
+    if value < min {
+        info_msg |= InfoMsg::MIN_CORRECTION;
+    }
+
+    if value > max {
+        info_msg |= InfoMsg::MAX_CORRECTION;
+    }
+
+    if info_msg.is_empty() {
+        return Err(Bme680Error::BoundaryCheckFailure(info_msg, min, max));
+    }
+    Ok(value)
+}
+
 impl<I2C, D> Bme680_dev<I2C, D>
 where
     D: DelayMs<u8>,
@@ -412,7 +430,7 @@ where
         self.bme680_set_sensor_mode(power_mode)?;
 
         if desired_settings.contains(DesiredSensorSettings::FILTER_SEL) {
-            let tph_sett_filter = self.boundary_check(self.tph_sett.filter, 0, 7)?;
+            let tph_sett_filter = boundary_check(self.tph_sett.filter, 0, 7)?;
             reg_addr = 0x75u8;
             let mut data = self.get_regs_u8(reg_addr)?;
 
@@ -426,7 +444,7 @@ where
 
         if desired_settings.contains(DesiredSensorSettings::HCNTRL_SEL) {
 
-            let gas_sett_heatr_ctrl = self.boundary_check(self.gas_sett.heatr_ctrl, 0x0u8, 0x8u8)?;
+            let gas_sett_heatr_ctrl = boundary_check(self.gas_sett.heatr_ctrl, 0x0u8, 0x8u8)?;
             reg_addr = 0x70u8;
             let mut data = self.get_regs_u8(reg_addr)?;
             data = (data as (i32) & !0x8i32 | gas_sett_heatr_ctrl  as (i32) & 0x8) as (u8) ;
@@ -440,7 +458,7 @@ where
             let mut data = self.get_regs_u8(reg_addr)?;
 
             if desired_settings.contains(DesiredSensorSettings::OST_SEL) {
-                let tph_sett_os_temp = self.boundary_check(self.tph_sett.os_temp, 0, 5)?;
+                let tph_sett_os_temp = boundary_check(self.tph_sett.os_temp, 0, 5)?;
                 data = (data as (i32) & !0xe0i32 | tph_sett_os_temp as (i32) << 5i32 & 0xe0i32)
                     as (u8);
             }
@@ -455,7 +473,7 @@ where
         }
 
         if desired_settings.contains(DesiredSensorSettings::OSH_SEL) {
-            let tph_sett_os_hum = self.boundary_check(self.tph_sett.os_hum, 0, 5)?;
+            let tph_sett_os_hum = boundary_check(self.tph_sett.os_hum, 0, 5)?;
             reg_addr = 0x72u8;
             let mut data = self.get_regs_u8(reg_addr)?;
             data = (data as (i32) & !0x7i32 | tph_sett_os_hum as (i32) & 0x7i32) as (u8);
@@ -468,13 +486,13 @@ where
             let mut data = self.get_regs_u8(reg_addr)?;
 
             if desired_settings.contains(DesiredSensorSettings::RUN_GAS_SEL) {
-                let gas_sett_run_gas = self.boundary_check(self.gas_sett.run_gas, 0, 1)?;
+                let gas_sett_run_gas = boundary_check(self.gas_sett.run_gas, 0, 1)?;
                 data = (data as (i32) & !0x10i32 | gas_sett_run_gas as (i32) << 4i32 & 0x10i32)
                     as (u8);
             }
 
             if desired_settings.contains(DesiredSensorSettings::NBCONV_SEL) {
-                let gas_sett_nb_conv = self.boundary_check(self.gas_sett.nb_conv, 0, 10)?;
+                let gas_sett_nb_conv = boundary_check(self.gas_sett.nb_conv, 0, 10)?;
                 data = (data as (i32) & !0xfi32 | gas_sett_nb_conv as (i32) & 0xfi32) as (u8);
             }
 
@@ -674,7 +692,7 @@ where
 
         calib.res_heat_val = self.get_regs_i8(BME680_ADDR_RES_HEAT_VAL_ADDR)?;
 
-        calib.range_sw_err = (self.get_regs_i8(BME680_ADDR_RANGE_SW_ERR_ADDR)? & 0xf0) / 16;
+        calib.range_sw_err = (self.get_regs_u8(BME680_ADDR_RANGE_SW_ERR_ADDR)? & BME680_RSERROR_MSK) / 16;
 
         Ok(calib)
     }
@@ -890,25 +908,5 @@ where
             }
         }
         Err(Bme680Error::NoNewData)
-    }
-
-    fn boundary_check(&self, value: Option<u8>, min: u8, max: u8) -> Result<u8> {
-        let mut info_msg: InfoMsg = Default::default();
-
-        // TODO give the nullptr here a different name
-        let value = value.ok_or(Bme680Error::NulltPtr)?;
-
-        if value < min {
-            info_msg |= InfoMsg::MIN_CORRECTION;
-        }
-
-        if value > max {
-            info_msg |= InfoMsg::MAX_CORRECTION;
-        }
-
-        if info_msg.is_empty() {
-            return Err(Bme680Error::BoundaryCheckFailure(info_msg, min, max));
-        }
-        Ok(value)
     }
 }
