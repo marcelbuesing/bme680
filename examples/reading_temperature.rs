@@ -4,11 +4,12 @@ extern crate bme680_rs;
 
 use bme680_rs::*;
 use hal::*;
+use embedded_hal::blocking::i2c as i2c;
 use std::thread;
 use std::result;
 use std::time::Duration;
 
-fn main() -> result::Result<(), Bme680Error>{
+fn main() -> result::Result<(), Bme680Error<<hal::I2cdev as i2c::Read>::Error , <hal::I2cdev as i2c::Write>::Error>>{
 
     let i2c = I2cdev::new("/dev/i2c-1").unwrap();
 
