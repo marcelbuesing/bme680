@@ -1,12 +1,9 @@
-#![feature(try_from)]
-
 #[macro_use]
 extern crate bitflags;
 extern crate embedded_hal as hal;
 
 use hal::blocking::delay::DelayMs;
 use hal::blocking::i2c::{Read, Write};
-use std::convert::TryFrom;
 
 use std::result;
 
@@ -346,7 +343,7 @@ impl I2CUtil
     where I2C: Read {
         let mut buf = [0; 1];
         match i2c.read(reg_addr, &mut buf) {
-            Ok(()) => Ok(i8::try_from(buf[0]).expect("U8 overflow when reading register")),
+            Ok(()) => Ok(buf[0] as i8),
             Err(_) => Err(Bme680Error::CommunicationFailure),
         }
     }

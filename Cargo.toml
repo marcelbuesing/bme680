@@ -5,7 +5,6 @@ authors = ["marcelbuesing <buesing.marcel@googlemail.com>"]
 
 [dependencies]
 bitflags = "1.0"
-byteorder = "1.2"
 embedded-hal = "0.2"
 
 [dev-dependencies]

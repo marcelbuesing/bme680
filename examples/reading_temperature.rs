@@ -1,11 +1,8 @@
-//extern crate i2cdev;
 extern crate embedded_hal;
 extern crate linux_embedded_hal as hal;
 extern crate bme680_rs;
 
-//use i2cdev::linux::LinuxI2CDevice;
 use bme680_rs::*;
-use std::io;
 use hal::*;
 use std::thread;
 use std::result;
