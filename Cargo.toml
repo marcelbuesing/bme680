@@ -6,4 +6,8 @@ authors = ["marcelbuesing <buesing.marcel@googlemail.com>"]
 [dependencies]
 bitflags = "1.0"
 byteorder = "1.2"
-embedded-hal = "0.1"
+embedded-hal = "0.2"
+
+[dev-dependencies]
+i2cdev = "0.3"
+linux-embedded-hal = "0.2"
