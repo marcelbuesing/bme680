@@ -25,7 +25,7 @@ pub const BME680_COEFF_ADDR1_LEN: u8 = 25;
 pub const BME680_COEFF_ADDR2_LEN: u8 = 16;
 
 /** BME680 field_x related defines */
-pub const BME680_FIELD_LENGTH: u8 = 15;
+pub const BME680_FIELD_LENGTH: usize = 15;
 pub const BME680_FIELD_ADDR_OFFSET: u8 = 17;
 
 pub const BME680_SOFT_RESET_CMD: u8 = 0xb6;
@@ -256,7 +256,7 @@ impl Clone for TphSett {
 #[derive(Default, Copy)]
 #[repr(C)]
 pub struct GasSett {
-    pub nb_conv: Option<u8>,
+    pub nb_conv: u8,
     pub heatr_ctrl: Option<u8>,
     pub run_gas: Option<u8>,
     pub heatr_temp: Option<u16>,
@@ -384,17 +384,20 @@ fn boundary_check<I2C>(value: Option<u8>, min: u8, max: u8) -> Result<u8, <I2C a
     let mut info_msg: InfoMsg = Default::default();
 
     // TODO give the nullptr here a different name
-    let value = value.ok_or(Bme680Error::NulltPtr)?;
+    let value = value.unwrap();
 
     if value < min {
+        error!("Boundary check failure max correction, {} < {}", value, min);
         info_msg |= InfoMsg::MIN_CORRECTION;
     }
 
     if value > max {
+        error!("Boundary check failure max correction, {} > {}", value, max);
         info_msg |= InfoMsg::MAX_CORRECTION;
     }
 
-    if info_msg.is_empty() {
+    if !info_msg.is_empty() {
+        error!("Boundary check failure");
         return Err(Bme680Error::BoundaryCheckFailure(info_msg, min, max));
     }
     Ok(value)
@@ -441,6 +444,7 @@ where
                 tph_sett: Default::default(),
                 gas_sett: Default::default(),
             };
+            info!("Finished device init");
             Ok(dev)
         } else {
             error!("Device does not match chip id {}", BME680_CHIP_ID);
@@ -523,7 +527,7 @@ where
             }
 
             if desired_settings.contains(DesiredSensorSettings::OSP_SEL) {
-                let tph_sett_os_pres = tph_sett.os_temp.ok_or(Bme680Error::NulltPtr)?;
+                let tph_sett_os_pres = tph_sett.os_temp.expect("OS TEMP");
                 data = (data as (i32) & !0x1ci32 | tph_sett_os_pres as (i32) << 2i32 & 0x1ci32)
                     as (u8);
             }
@@ -533,7 +537,7 @@ where
 
         /* Selecting humidity oversampling for the sensor */
         if desired_settings.contains(DesiredSensorSettings::OSH_SEL) {
-            let tph_sett_os_hum = boundary_check::<I2C>(self.tph_sett.os_hum, 0, 5)?;
+            let tph_sett_os_hum = boundary_check::<I2C>(tph_sett.os_hum, 0, 5)?;
             reg_addr = 0x72u8;
             let mut data = I2CUtil::read_byte(&mut self.i2c, self.dev_id, reg_addr)?;
             data = (data as (i32) & !0x7i32 | tph_sett_os_hum as (i32) & 0x7i32) as (u8);
@@ -554,7 +558,7 @@ where
             }
 
             if desired_settings.contains(DesiredSensorSettings::NBCONV_SEL) {
-                let gas_sett_nb_conv = boundary_check::<I2C>(gas_sett.nb_conv, 0, 10)?;
+                let gas_sett_nb_conv = boundary_check::<I2C>(Some(gas_sett.nb_conv), 0, 10)?;
                 data = (data as (i32) & !0xfi32 | gas_sett_nb_conv as (i32) & 0xfi32) as (u8);
             }
 
@@ -601,7 +605,7 @@ where
         }
 
         if desired_settings.contains(DesiredSensorSettings::RUN_GAS_SEL | DesiredSensorSettings::NBCONV_SEL) {
-            sensor_settings.gas_sett.nb_conv = Some((data_array[1usize] as (i32) & 0xfi32) as (u8));
+            sensor_settings.gas_sett.nb_conv = (data_array[1usize] as (i32) & 0xfi32) as (u8);
             sensor_settings.gas_sett.run_gas =
                 Some(((data_array[1usize] as (i32) & 0x10i32) >> 4i32) as (u8));
         }
@@ -679,20 +683,15 @@ where
         tph_dur = tph_dur.wrapping_add(1u32);
         let mut duration = tph_dur as (u16);
         if sensor_settings.gas_sett.run_gas.unwrap_or(0) != 0 {
-            duration = duration + sensor_settings.gas_sett.heatr_dur.ok_or(Bme680Error::NulltPtr)?;
+            duration = duration + sensor_settings.gas_sett.heatr_dur.expect("Heatrdur");
         }
         Ok(duration)
     }
 
+    // TODO remove
     /// @returns (FieldData, IsNewFields)
     pub fn get_sensor_data(&mut self) -> Result<(FieldData, FieldDataState), <I2C as Read>::Error, <I2C as Write>::Error> {
-        let field_data = self.read_field_data()?;
-        if field_data.status & BME680_NEW_DATA_MSK != 0 {
-            // new fields
-            Ok((field_data, FieldDataState::NewData))
-        } else {
-            Ok((field_data, FieldDataState::NoNewData))
-        }
+        self.read_field_data()
     }
 
     fn get_calib_data<I2CX>(i2c:&mut I2CX, dev_id: u8) -> Result<CalibData, <I2CX as Read>::Error, <I2CX as Write>::Error>
@@ -770,7 +769,7 @@ where
         reg.push((BME680_RES_HEAT0_ADDR, self.calc_heater_res(gas_sett.heatr_temp.unwrap_or(0))));
         reg.push((BME680_GAS_WAIT0_ADDR, self.calc_heater_dur(gas_sett.heatr_dur.unwrap_or(0))));
 
-        self.gas_sett.nb_conv = Some(0);
+        self.gas_sett.nb_conv = 0;
         self.bme680_set_regs(reg.as_slice())
     }
 
@@ -921,8 +920,10 @@ where
         calc_gas_res
     }
 
-    fn read_field_data(&mut self) -> Result<FieldData, <I2C as Read>::Error, <I2C as Write>::Error> {
-        let mut buff = [0, BME680_FIELD_LENGTH];
+    fn read_field_data(&mut self) -> Result<(FieldData, FieldDataState), <I2C as Read>::Error, <I2C as Write>::Error> {
+        let mut buff:[u8; BME680_FIELD_LENGTH] = [0; BME680_FIELD_LENGTH];
+
+        debug!("Buf {:?}, len: {}", buff, buff.len());
         let mut data: FieldData = Default::default();
         let mut gas_range: u8;
         let mut adc_temp: u32;
@@ -933,6 +934,8 @@ where
 
         loop {
             I2CUtil::read_bytes(&mut self.i2c, self.dev_id, BME680_FIELD0_ADDR, &mut buff)?;
+
+            debug!("Field data read {:?}, len: {}", buff, buff.len());
 
             data.status = buff[0] & BME680_NEW_DATA_MSK;
             data.gas_index = buff[0] & BME680_GAS_INDEX_MSK;;
@@ -955,7 +958,7 @@ where
                 data.pressure = self.calc_pressure(adc_pres);
                 data.humidity = self.calc_humidity(adc_hum);
                 data.gas_resistance = self.calc_gas_resistance(adc_gas_res, gas_range);
-                return Ok(data);
+                return Ok((data, FieldDataState::NewData));
             }
 
             self.delay.delay_ms(BME680_POLL_PERIOD_MS);
@@ -965,6 +968,6 @@ where
                 break;
             }
         }
-        Err(Bme680Error::NoNewData)
+        Ok((data, FieldDataState::NoNewData))
     }
 }

@@ -1,6 +1,8 @@
 extern crate embedded_hal;
 extern crate env_logger;
 extern crate linux_embedded_hal as hal;
+#[macro_use]
+extern crate log;
 extern crate bme680_rs;
 
 use bme680_rs::*;
@@ -33,15 +35,32 @@ fn main() -> result::Result<(), Bme680Error<<hal::I2cdev as i2c::Read>::Error , 
         DesiredSensorSettings::OSH_SEL |
         DesiredSensorSettings::GAS_SENSOR_SEL;
 
-    let profile_dur = dev.get_profile_dur(&sensor_settings)?;
-    println!("Duration {}", profile_dur);
+    debug!("Settings {}", settings_sel.bits());
 
+    debug!("NBCONV_SEL {}", settings_sel == DesiredSensorSettings::NBCONV_SEL);
+    debug!("OSH_SEL {}", settings_sel == DesiredSensorSettings::OSH_SEL);
+
+    debug!("NBCONV_SEL {}", settings_sel.intersects(DesiredSensorSettings::NBCONV_SEL));
+    debug!("OSH_SEL {}", settings_sel.intersects(DesiredSensorSettings::OSH_SEL));
+
+    debug!("NBCONV_SEL {}", settings_sel.contains(DesiredSensorSettings::NBCONV_SEL));
+    debug!("OSH_SEL {}", settings_sel.contains(DesiredSensorSettings::OSH_SEL));
+
+    debug!("NBCONV_SEL {}", settings_sel & DesiredSensorSettings::NBCONV_SEL != DesiredSensorSettings::NBCONV_SEL);
+    debug!("OSH_SEL {}", settings_sel & DesiredSensorSettings::OSH_SEL != DesiredSensorSettings::OSH_SEL);
+
+    let profile_dur = dev.get_profile_dur(&sensor_settings)?;
+    info!("Duration {}", profile_dur);
+    info!("Setting sensor settings");
     dev.set_sensor_settings(settings_sel, &sensor_settings)?;
+    info!("Setting forced power modes");
     dev.set_sensor_mode(PowerMode::ForcedMode)?;
 
-    thread::sleep(Duration::from_millis(profile_dur as u64));
-
-    let data = dev.get_sensor_data()?;
-    println!("Sensor Data {:?}", data);
+    loop {
+        thread::sleep(Duration::from_millis(profile_dur as u64));
+        info!("Retrieving sensor data");
+        let data = dev.get_sensor_data()?;
+        info!("Sensor Data {:?}", data);
+    }
     Ok(())
 }
