@@ -22,32 +22,20 @@ fn main() -> result::Result<(), Bme680Error<<hal::I2cdev as i2c::Read>::Error , 
 
     let mut sensor_settings: SensorSettings = Default::default();
 
-    sensor_settings.tph_sett.os_hum = Some(BME680_OS_1X);
-    sensor_settings.tph_sett.os_pres = Some(BME680_OS_16X);
-    sensor_settings.tph_sett.os_temp = Some(BME680_OS_2X);
+    sensor_settings.tph_sett.os_hum = Some(BME680_OS_2X);
+    sensor_settings.tph_sett.os_pres = Some(BME680_OS_4X);
+    sensor_settings.tph_sett.os_temp = Some(BME680_OS_8X);
+    sensor_settings.tph_sett.filter = Some(2);
 
     sensor_settings.gas_sett.run_gas = Some(0x01);
-    sensor_settings.gas_sett.heatr_dur = Some(2000);
+    sensor_settings.gas_sett.heatr_dur = Some(1500);
+    sensor_settings.gas_sett.heatr_temp = Some(320);
 
     let settings_sel =
         DesiredSensorSettings::OST_SEL |
         DesiredSensorSettings::OSP_SEL |
         DesiredSensorSettings::OSH_SEL |
         DesiredSensorSettings::GAS_SENSOR_SEL;
-
-    debug!("Settings {}", settings_sel.bits());
-
-    debug!("NBCONV_SEL {}", settings_sel == DesiredSensorSettings::NBCONV_SEL);
-    debug!("OSH_SEL {}", settings_sel == DesiredSensorSettings::OSH_SEL);
-
-    debug!("NBCONV_SEL {}", settings_sel.intersects(DesiredSensorSettings::NBCONV_SEL));
-    debug!("OSH_SEL {}", settings_sel.intersects(DesiredSensorSettings::OSH_SEL));
-
-    debug!("NBCONV_SEL {}", settings_sel.contains(DesiredSensorSettings::NBCONV_SEL));
-    debug!("OSH_SEL {}", settings_sel.contains(DesiredSensorSettings::OSH_SEL));
-
-    debug!("NBCONV_SEL {}", settings_sel & DesiredSensorSettings::NBCONV_SEL != DesiredSensorSettings::NBCONV_SEL);
-    debug!("OSH_SEL {}", settings_sel & DesiredSensorSettings::OSH_SEL != DesiredSensorSettings::OSH_SEL);
 
     let profile_dur = dev.get_profile_dur(&sensor_settings)?;
     info!("Duration {}", profile_dur);
@@ -56,8 +44,15 @@ fn main() -> result::Result<(), Bme680Error<<hal::I2cdev as i2c::Read>::Error , 
     info!("Setting forced power modes");
     dev.set_sensor_mode(PowerMode::ForcedMode)?;
 
+    let sensor_settings = dev.get_sensor_settings(settings_sel);
+    info!("Sensor settings: {:?}", sensor_settings);
+
     loop {
         thread::sleep(Duration::from_millis(profile_dur as u64));
+        let power_mode = dev.get_sensor_mode();
+        info!("Sensor power mode: {:?}", power_mode);
+        info!("Setting forced power modes");
+        dev.set_sensor_mode(PowerMode::ForcedMode)?;
         info!("Retrieving sensor data");
         let data = dev.get_sensor_data()?;
         info!("Sensor Data {:?}", data);

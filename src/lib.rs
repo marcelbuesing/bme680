@@ -4,10 +4,13 @@ extern crate embedded_hal as hal;
 #[macro_use]
 extern crate log;
 
+mod calc;
+
 use hal::blocking::delay::DelayMs;
 use hal::blocking::i2c::{Read, Write};
-
+use calc::Calc;
 use std::result;
+
 
 /** BME680 General config */
 pub const BME680_POLL_PERIOD_MS: u8 = 10;
@@ -21,8 +24,8 @@ pub const BME680_CHIP_ID: u8 = 0x61;
 
 /** BME680 coefficients related defines */
 pub const BME680_COEFF_SIZE: usize = 41;
-pub const BME680_COEFF_ADDR1_LEN: u8 = 25;
-pub const BME680_COEFF_ADDR2_LEN: u8 = 16;
+pub const BME680_COEFF_ADDR1_LEN: usize = 25;
+pub const BME680_COEFF_ADDR2_LEN: usize = 16;
 
 /** BME680 field_x related defines */
 pub const BME680_FIELD_LENGTH: usize = 15;
@@ -177,7 +180,7 @@ pub type Result<T, R, W> = result::Result<T, Bme680Error<R, W>>;
 ///
 /// Power mode settings
 ///
-#[derive(PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum PowerMode {
     SleepMode,
     ForcedMode,
@@ -226,7 +229,6 @@ pub struct CalibData {
     pub par_p8: i16,
     pub par_p9: i16,
     pub par_p10: u8,
-    pub t_fine: i32,
     pub res_heat_range: u8,
     pub res_heat_val: i8,
     pub range_sw_err: u8,
@@ -238,7 +240,7 @@ impl Clone for CalibData {
     }
 }
 
-#[derive(Default, Copy)]
+#[derive(Debug, Default, Copy)]
 #[repr(C)]
 pub struct TphSett {
     pub os_hum: Option<u8>,
@@ -253,7 +255,7 @@ impl Clone for TphSett {
     }
 }
 
-#[derive(Default, Copy)]
+#[derive(Debug, Default, Copy)]
 #[repr(C)]
 pub struct GasSett {
     pub nb_conv: u8,
@@ -306,7 +308,7 @@ bitflags! {
     }
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct SensorSettings {
     pub gas_sett: GasSett,
     pub tph_sett: TphSett,
@@ -457,16 +459,16 @@ where
             return Err(Bme680Error::InvalidLength);
         }
 
-        let mut tmp_buff = Vec::with_capacity(BME680_TMP_BUFFER_LENGTH);
-
         for (reg_addr, reg_data) in reg {
-            tmp_buff.push(reg_addr.to_owned());
-            tmp_buff.push(reg_data.to_owned());
+            let tmp_buff: [u8; 2] = [reg_addr.clone(), reg_data.clone()];
+            debug!("Setting register reg: {:?} tmp_buf: {:?}", reg_addr, tmp_buff);
+            self.i2c.write(self.dev_id, &tmp_buff).map_err(|e| Bme680Error::I2CWrite(e))?;
         }
 
-        self.i2c
-            .write(self.dev_id, tmp_buff.as_slice())
-            .map_err(|e| Bme680Error::I2CWrite(e))
+        Ok(())
+//        self.i2c
+//            .write(self.dev_id, tmp_buff.as_slice())
+//            .map_err(|e| Bme680Error::I2CWrite(e))
     }
 
     // TODO replace parameter desired_settings with safe flags
@@ -485,6 +487,7 @@ where
         let intended_power_mode = self.power_mode;
 
         if desired_settings.contains(DesiredSensorSettings::GAS_MEAS_SEL) {
+            debug!("GAS_MEAS_SEL: true");
             self.set_gas_config(gas_sett)?;
         }
 
@@ -499,6 +502,7 @@ where
 
             // TODO duplicate check of condition ?
             if desired_settings.contains(DesiredSensorSettings::FILTER_SEL) {
+                debug!("FILTER_SEL: true");
                 data = (data as (i32) & !0x1ci32 |tph_sett_filter as (i32) << 2i32 & 0x1ci32)
                     as (u8);
             }
@@ -506,6 +510,7 @@ where
         }
 
         if desired_settings.contains(DesiredSensorSettings::HCNTRL_SEL) {
+            debug!("HCNTRL_SEL: true");
             let gas_sett_heatr_ctrl = boundary_check::<I2C>(gas_sett.heatr_ctrl, 0x0u8, 0x8u8)?;
             reg_addr = 0x70u8;
             let mut data = I2CUtil::read_byte(&mut self.i2c, self.dev_id, reg_addr)?;
@@ -521,12 +526,14 @@ where
             let mut data = I2CUtil::read_byte(&mut self.i2c, self.dev_id, reg_addr)?;
 
             if desired_settings.contains(DesiredSensorSettings::OST_SEL) {
+                debug!("OST_SEL: true");
                 let tph_sett_os_temp = boundary_check::<I2C>(tph_sett.os_temp, 0, 5)?;
                 data = (data as (i32) & !0xe0i32 | tph_sett_os_temp as (i32) << 5i32 & 0xe0i32)
                     as (u8);
             }
 
             if desired_settings.contains(DesiredSensorSettings::OSP_SEL) {
+                debug!("OSP_SEL: true");
                 let tph_sett_os_pres = tph_sett.os_temp.expect("OS TEMP");
                 data = (data as (i32) & !0x1ci32 | tph_sett_os_pres as (i32) << 2i32 & 0x1ci32)
                     as (u8);
@@ -537,6 +544,7 @@ where
 
         /* Selecting humidity oversampling for the sensor */
         if desired_settings.contains(DesiredSensorSettings::OSH_SEL) {
+            debug!("OSH_SEL: true");
             let tph_sett_os_hum = boundary_check::<I2C>(tph_sett.os_hum, 0, 5)?;
             reg_addr = 0x72u8;
             let mut data = I2CUtil::read_byte(&mut self.i2c, self.dev_id, reg_addr)?;
@@ -552,12 +560,14 @@ where
             let mut data = I2CUtil::read_byte(&mut self.i2c, self.dev_id, reg_addr)?;
 
             if desired_settings.contains(DesiredSensorSettings::RUN_GAS_SEL) {
+                debug!("RUN_GAS_SEL: true");
                 let gas_sett_run_gas = boundary_check::<I2C>(gas_sett.run_gas, 0, 1)?;
                 data = (data as (i32) & !0x10i32 | gas_sett_run_gas as (i32) << 4i32 & 0x10i32)
                     as (u8);
             }
 
             if desired_settings.contains(DesiredSensorSettings::NBCONV_SEL) {
+                debug!("NBCONV_SEL: true");
                 let gas_sett_nb_conv = boundary_check::<I2C>(Some(gas_sett.nb_conv), 0, 10)?;
                 data = (data as (i32) & !0xfi32 | gas_sett_nb_conv as (i32) & 0xfi32) as (u8);
             }
@@ -616,7 +626,6 @@ where
     pub fn set_sensor_mode(&mut self, target_power_mode: PowerMode) -> Result<(), <I2C as Read>::Error, <I2C as Write>::Error> {
         let mut tmp_pow_mode: u8;
         let mut current_power_mode: PowerMode;
-        let reg_addr: u8 = 0x74u8;
 
         /* Call repeatedly until in sleep */
         loop {
@@ -624,11 +633,14 @@ where
 
             /* Put to sleep before changing mode */
             current_power_mode = PowerMode::from(tmp_pow_mode & BME680_MODE_MSK);
+
+            debug!("Current power mode: {:?}", current_power_mode);
+
             if current_power_mode != PowerMode::SleepMode {
                 /* Set to sleep*/
                 tmp_pow_mode = tmp_pow_mode & !BME680_MODE_MSK;
-                let reg = vec!((reg_addr, tmp_pow_mode));
-                self.bme680_set_regs(reg.as_slice())?;
+                debug!("Setting to sleep tmp_pow_mode: {}", tmp_pow_mode);
+                self.bme680_set_regs(&[(BME680_CONF_T_P_MODE_ADDR, tmp_pow_mode)])?;
                 self.delay.delay_ms(BME680_POLL_PERIOD_MS);
             } else {
                 // TODO do while in Rust?
@@ -637,9 +649,10 @@ where
         }
 
         /* Already in sleep */
-        if current_power_mode != PowerMode::SleepMode {
+        if target_power_mode != PowerMode::SleepMode {
             tmp_pow_mode = tmp_pow_mode & !BME680_MODE_MSK | target_power_mode.value();
-            self.bme680_set_regs(&[(reg_addr, tmp_pow_mode)])?;
+            debug!("Already in sleep Target power mode: {}", tmp_pow_mode);
+            self.bme680_set_regs(&[(BME680_CONF_T_P_MODE_ADDR, tmp_pow_mode)])?;
         }
         Ok(())
     }
@@ -698,21 +711,29 @@ where
         where I2CX: Read + Write
     {
         let mut calib: CalibData = Default::default();
-        let mut coeff_array: [u8; BME680_COEFF_SIZE] = [0; BME680_COEFF_SIZE];
+
+        // TODO figure out how to avoid allocating twice
+        let mut coeff_vec = Vec::with_capacity(BME680_COEFF_SIZE);
+        let mut coeff_array_1: [u8; BME680_COEFF_ADDR1_LEN] = [0; BME680_COEFF_ADDR1_LEN];
+        let mut coeff_array_2: [u8; BME680_COEFF_ADDR2_LEN] = [0; BME680_COEFF_ADDR2_LEN];
 
         I2CUtil::read_bytes::<I2CX>(
             i2c,
             dev_id,
             BME680_COEFF_ADDR1,
-            &mut coeff_array,
+            &mut coeff_array_1,
         )?;
 
         I2CUtil::read_bytes::<I2CX>(
             i2c,
             dev_id,
             BME680_COEFF_ADDR2,
-            &mut coeff_array,
+            &mut coeff_array_2,
         )?;
+
+        coeff_vec.extend_from_slice(&coeff_array_1);
+        coeff_vec.extend_from_slice(&coeff_array_2);
+        let coeff_array = coeff_vec.as_slice();
 
         calib.par_t1 = (coeff_array[34usize] as (u16) as (i32) << 8i32
             | coeff_array[33usize] as (u16) as (i32)) as (u16);
@@ -766,8 +787,8 @@ where
         }
 
         // TODO check whether unwrap_or changes behaviour
-        reg.push((BME680_RES_HEAT0_ADDR, self.calc_heater_res(gas_sett.heatr_temp.unwrap_or(0))));
-        reg.push((BME680_GAS_WAIT0_ADDR, self.calc_heater_dur(gas_sett.heatr_dur.unwrap_or(0))));
+        reg.push((BME680_RES_HEAT0_ADDR, Calc::calc_heater_res(&self.calib, self.amb_temp, gas_sett.heatr_temp.unwrap_or(0))));
+        reg.push((BME680_GAS_WAIT0_ADDR, Calc::calc_heater_dur(gas_sett.heatr_dur.unwrap_or(0))));
 
         self.gas_sett.nb_conv = 0;
         self.bme680_set_regs(reg.as_slice())
@@ -780,144 +801,6 @@ where
         gas_sett.heatr_temp = Some(I2CUtil::read_byte(&mut self.i2c, self.dev_id, BME680_ADDR_SENS_CONF_START)? as u16);
         gas_sett.heatr_dur = Some(I2CUtil::read_byte(&mut self.i2c, self.dev_id, BME680_ADDR_GAS_CONF_START)? as u16);
         Ok(gas_sett)
-    }
-
-    fn calc_heater_res(&self, temp: u16) -> u8 {
-        // cap temperature
-        let temp = if temp <= 400 { temp } else { 400 };
-
-        let var1 = self.amb_temp as (i32) * self.calib.par_gh3 as (i32) / 1000i32 * 256i32;
-        let var2 = (self.calib.par_gh1 as (i32) + 784i32)
-            * (((self.calib.par_gh2 as (i32) + 154009i32) * temp as (i32) * 5i32 / 100i32
-                + 3276800i32) / 10i32);
-        let var3 = var1 + var2 / 2i32;
-        let var4 = var3 / (self.calib.res_heat_range as (i32) + 4i32);
-        let var5 = 131i32 * self.calib.res_heat_val as (i32) + 65536i32;
-        let heatr_res_x100 = (var4 / var5 - 250i32) * 34i32;
-        ((heatr_res_x100 + 50i32) / 100i32) as (u8)
-    }
-
-    fn calc_heater_dur(&self, dur: u16) -> u8 {
-        let mut factor: u8 = 0u8;
-        let mut dur = dur;
-        let durval =
-          if dur as (i32) >= 0xfc0i32 {
-              0xffu8 // Max duration
-          } else {
-              loop {
-                  if !(dur as (i32) > 0x3fi32) {
-                      break;
-                  }
-                  dur = (dur as (i32) / 4i32) as (u16);
-                  factor = (factor as (i32) + 1i32) as (u8);
-              }
-              (dur as (i32) + factor as (i32) * 64i32) as (u8)
-          };
-        durval
-    }
-
-    fn calc_temperature(&mut self, temp_adc: u32) -> i16 {
-        let var1 = ((temp_adc as (i32) >> 3i32) - (self.calib.par_t1 as (i32) << 1i32)) as (isize);
-        let var2 = var1 * self.calib.par_t2 as (i32) as (isize) >> 11i32;
-        let var3 = (var1 >> 1i32) * (var1 >> 1i32) >> 12i32;
-        let var3 = var3 * (self.calib.par_t3 as (i32) << 4i32) as (isize) >> 14i32;
-        // TODO really assign here ?
-        self.calib.t_fine = (var2 + var3) as (i32);
-        let calc_temp = (self.calib.t_fine * 5i32 + 128i32 >> 8i32) as (i16);
-        calc_temp
-    }
-
-    fn calc_pressure(&self, pres_adc: u32) -> u32 {
-        let mut var1 = (self.calib.t_fine >> 1i32) - 64000i32;
-        let mut var2 = ((var1 >> 2i32) * (var1 >> 2i32) >> 11i32) * self.calib.par_p6 as (i32) >> 2i32;
-        var2 = var2 + (var1 * self.calib.par_p5 as (i32) << 1i32);
-        var2 = (var2 >> 2i32) + (self.calib.par_p4 as (i32) << 16i32);
-        var1 = (((var1 >> 2i32) * (var1 >> 2i32) >> 13i32) * (self.calib.par_p3 as (i32) << 5i32)
-            >> 3i32) + (self.calib.par_p2 as (i32) * var1 >> 1i32);
-        var1 = var1 >> 18i32;
-        var1 = (32768i32 + var1) * self.calib.par_p1 as (i32) >> 15i32;
-        let mut pressure_comp = 1048576u32.wrapping_sub(pres_adc) as (i32);
-        pressure_comp = ((pressure_comp - (var2 >> 12i32)) as (u32)).wrapping_mul(3125u32) as (i32);
-        if pressure_comp >= 0x40000000i32 {
-            pressure_comp = ((pressure_comp as (u32)).wrapping_div(var1 as (u32)) << 1i32) as (i32);
-        } else {
-            pressure_comp = ((pressure_comp << 1i32) as (u32)).wrapping_div(var1 as (u32)) as (i32);
-        }
-        var1 = self.calib.par_p9 as (i32)
-            * ((pressure_comp >> 3i32) * (pressure_comp >> 3i32) >> 13i32) >> 12i32;
-        var2 = (pressure_comp >> 2i32) * self.calib.par_p8 as (i32) >> 13i32;
-        let var3 = (pressure_comp >> 8i32) * (pressure_comp >> 8i32) * (pressure_comp >> 8i32)
-            * self.calib.par_p10 as (i32) >> 17i32;
-        pressure_comp =
-            pressure_comp + (var1 + var2 + var3 + (self.calib.par_p7 as (i32) << 7i32) >> 4i32);
-        pressure_comp as (u32)
-    }
-
-    fn calc_humidity(&self, hum_adc: u16) -> u32 {
-        let temp_scaled = self.calib.t_fine * 5i32 + 128i32 >> 8i32;
-        let var1 = hum_adc as (i32) - self.calib.par_h1 as (i32) * 16i32
-            - (temp_scaled * self.calib.par_h3 as (i32) / 100i32 >> 1i32);
-        let var2 = self.calib.par_h2 as (i32)
-            * (temp_scaled * self.calib.par_h4 as (i32) / 100i32
-                + (temp_scaled * (temp_scaled * self.calib.par_h5 as (i32) / 100i32) >> 6i32)
-                    / 100i32 + (1i32 << 14i32)) >> 10i32;
-        let var3 = var1 * var2;
-        let var4 = self.calib.par_h6 as (i32) << 7i32;
-        let var4 = var4 + temp_scaled * self.calib.par_h7 as (i32) / 100i32 >> 4i32;
-        let var5 = (var3 >> 14i32) * (var3 >> 14i32) >> 10i32;
-        let var6 = var4 * var5 >> 1i32;
-        let mut calc_hum = (var3 + var6 >> 10i32) * 1000i32 >> 12i32;
-        if calc_hum > 100000i32 {
-            calc_hum = 100000i32;
-        } else if calc_hum < 0i32 {
-            calc_hum = 0i32;
-        }
-        calc_hum as (u32)
-    }
-
-    fn calc_gas_resistance(&mut self, gas_res_adc: u16, gas_range: u8) -> u32 {
-        let lookup_table1: [u32; 16] = [
-            2147483647u32,
-            2147483647u32,
-            2147483647u32,
-            2147483647u32,
-            2147483647u32,
-            2126008810u32,
-            2147483647u32,
-            2130303777u32,
-            2147483647u32,
-            2147483647u32,
-            2143188679u32,
-            2136746228u32,
-            2147483647u32,
-            2126008810u32,
-            2147483647u32,
-            2147483647u32,
-        ];
-        let lookup_table2: [u32; 16] = [
-            4096000000u32,
-            2048000000u32,
-            1024000000u32,
-            512000000u32,
-            255744255u32,
-            127110228u32,
-            64000000u32,
-            32258064u32,
-            16016016u32,
-            8000000u32,
-            4000000u32,
-            2000000u32,
-            1,
-            500000u32,
-            250000u32,
-            125000u32,
-        ];
-        let var1 = (1340isize + 5isize * self.calib.range_sw_err as (isize))
-            * lookup_table1[gas_range as (usize)] as (isize) >> 16i32;
-        let var2 = ((gas_res_adc as (isize) << 15i32) - 16777216isize + var1) as (usize);
-        let var3 = lookup_table2[gas_range as (usize)] as (isize) * var1 >> 9i32;
-        let calc_gas_res = ((var3 + (var2 as (isize) >> 1i32)) / var2 as (isize)) as (u32);
-        calc_gas_res
     }
 
     fn read_field_data(&mut self) -> Result<(FieldData, FieldDataState), <I2C as Read>::Error, <I2C as Write>::Error> {
@@ -954,10 +837,13 @@ where
             data.status = data.status | buff[14] & BME680_HEAT_STAB_MSK;
 
             if data.status & BME680_NEW_DATA_MSK != 0 {
-                data.temperature = self.calc_temperature(adc_temp);
-                data.pressure = self.calc_pressure(adc_pres);
-                data.humidity = self.calc_humidity(adc_hum);
-                data.gas_resistance = self.calc_gas_resistance(adc_gas_res, gas_range);
+
+                let (temp, t_fine) = Calc::calc_temperature(&self.calib, adc_temp);
+                debug!("adc_temp: {} adc_pres: {} adc_hum: {} adc_gas_res: {}, t_fine: {}", adc_temp, adc_pres, adc_hum, adc_gas_res, t_fine);
+                data.temperature = temp;
+                data.pressure = Calc::calc_pressure(&self.calib, t_fine, adc_pres);
+                data.humidity = Calc::calc_humidity(&self.calib, t_fine, adc_hum);
+                data.gas_resistance = Calc::calc_gas_resistance(&self.calib, adc_gas_res, gas_range);
                 return Ok((data, FieldDataState::NewData));
             }
 
