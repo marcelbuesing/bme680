@@ -491,8 +491,6 @@ where
         let tph_sett  = sensor_settings.tph_sett;
         let gas_sett  = sensor_settings.gas_sett;
 
-        let mut reg_addr: u8;
-
         let mut reg = Vec::with_capacity(BME680_REG_BUFFER_LENGTH);
         let intended_power_mode = self.power_mode;
 
@@ -507,29 +505,26 @@ where
         /* Selecting the filter */
         if desired_settings.contains(DesiredSensorSettings::FILTER_SEL) {
             let tph_sett_filter = boundary_check::<I2C>(tph_sett.filter, 0, 7)?;
-            reg_addr = 0x75u8;
-            let mut data = I2CUtil::read_byte(&mut self.i2c, self.dev_id, reg_addr)?;
+            let mut data = I2CUtil::read_byte(&mut self.i2c, self.dev_id, BME680_CONF_ODR_FILT_ADDR)?;
 
             debug!("FILTER_SEL: true");
             data = (data as (i32) & !0x1ci32 |tph_sett_filter as (i32) << 2i32 & 0x1ci32) as (u8);
-            reg.push((reg_addr, data));
+            reg.push((BME680_CONF_ODR_FILT_ADDR, data));
         }
 
         if desired_settings.contains(DesiredSensorSettings::HCNTRL_SEL) {
             debug!("HCNTRL_SEL: true");
             let gas_sett_heatr_ctrl = boundary_check::<I2C>(gas_sett.heatr_ctrl, 0x0u8, 0x8u8)?;
-            reg_addr = 0x70u8;
-            let mut data = I2CUtil::read_byte(&mut self.i2c, self.dev_id, reg_addr)?;
+            let mut data = I2CUtil::read_byte(&mut self.i2c, self.dev_id, BME680_CONF_HEAT_CTRL_ADDR)?;
             data = (data as (i32) & !0x8i32 | gas_sett_heatr_ctrl  as (i32) & 0x8) as (u8) ;
-            reg.push((reg_addr, data));
+            reg.push((BME680_CONF_HEAT_CTRL_ADDR, data));
         }
 
         /* Selecting heater T,P oversampling for the sensor */
         if desired_settings
             .contains(DesiredSensorSettings::OST_SEL | DesiredSensorSettings::OSP_SEL)
         {
-            reg_addr = 0x74u8;
-            let mut data = I2CUtil::read_byte(&mut self.i2c, self.dev_id, reg_addr)?;
+            let mut data = I2CUtil::read_byte(&mut self.i2c, self.dev_id, BME680_CONF_T_P_MODE_ADDR)?;
 
             if desired_settings.contains(DesiredSensorSettings::OST_SEL) {
                 debug!("OST_SEL: true");
@@ -545,25 +540,23 @@ where
                     as (u8);
             }
 
-            reg.push((reg_addr, data));
+            reg.push((BME680_CONF_T_P_MODE_ADDR, data));
         }
 
         /* Selecting humidity oversampling for the sensor */
         if desired_settings.contains(DesiredSensorSettings::OSH_SEL) {
             debug!("OSH_SEL: true");
             let tph_sett_os_hum = boundary_check::<I2C>(tph_sett.os_hum, 0, 5)?;
-            reg_addr = 0x72u8;
-            let mut data = I2CUtil::read_byte(&mut self.i2c, self.dev_id, reg_addr)?;
+            let mut data = I2CUtil::read_byte(&mut self.i2c, self.dev_id, BME680_CONF_OS_H_ADDR)?;
             data = (data as (i32) & !0x7i32 | tph_sett_os_hum as (i32) & 0x7i32) as (u8);
-            reg.push((reg_addr, data));
+            reg.push((BME680_CONF_OS_H_ADDR, data));
         }
 
         /* Selecting the runGas and NB conversion settings for the sensor */
         if desired_settings
             .contains(DesiredSensorSettings::RUN_GAS_SEL | DesiredSensorSettings::NBCONV_SEL)
         {
-            reg_addr = 0x71u8;
-            let mut data = I2CUtil::read_byte(&mut self.i2c, self.dev_id, reg_addr)?;
+            let mut data = I2CUtil::read_byte(&mut self.i2c, self.dev_id, BME680_CONF_ODR_RUN_GAS_NBC_ADDR)?;
 
             if desired_settings.contains(DesiredSensorSettings::RUN_GAS_SEL) {
                 debug!("RUN_GAS_SEL: true");
@@ -578,7 +571,7 @@ where
                 data = (data as (i32) & !0xfi32 | gas_sett_nb_conv as (i32) & 0xfi32) as (u8);
             }
 
-            reg.push((reg_addr, data));
+            reg.push((BME680_CONF_ODR_RUN_GAS_NBC_ADDR, data));
         }
 
         self.bme680_set_regs(reg.as_slice())?;
