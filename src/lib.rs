@@ -425,12 +425,9 @@ where
     I2C: Read + Write,
 {
     pub fn soft_reset(i2c: &mut I2C, delay: &mut D, dev_id: u8) -> Result<(), <I2C as Read>::Error, <I2C as Write>::Error> {
-        // TODO do we we really need TMP_BUFFER_LENGTH ?
-        let mut tmp_buff = Vec::with_capacity(BME680_TMP_BUFFER_LENGTH);
-        tmp_buff.push(BME680_SOFT_RESET_ADDR);
-        tmp_buff.push(BME680_SOFT_RESET_CMD);
+        let tmp_buff: [u8; 2] = [BME680_SOFT_RESET_ADDR, BME680_SOFT_RESET_CMD];
 
-        i2c.write(dev_id, tmp_buff.as_slice())
+        i2c.write(dev_id, &tmp_buff)
            .map_err(|e| Bme680Error::I2CWrite(e))?;
 
         delay.delay_ms(BME680_RESET_PERIOD);
@@ -443,9 +440,8 @@ where
         debug!("Reading chip id");
         /* Soft reset to restore it to default values*/
         let chip_id = I2CUtil::read_byte::<I2C>(&mut i2c, dev_id, BME680_CHIP_ID_ADDR)?;
-
         debug!("Chip id: {}", chip_id);
-        //let chip_id = dev.read_byte(BME680_CHIP_ID_ADDR)?;
+
         if chip_id == BME680_CHIP_ID {
             debug!("Reading calib data");
             let calib = Bme680_dev::<I2C, D>::get_calib_data::<I2C>(&mut i2c, dev_id)?;
@@ -480,6 +476,7 @@ where
         }
 
         Ok(())
+
 //        self.i2c
 //            .write(self.dev_id, tmp_buff.as_slice())
 //            .map_err(|e| Bme680Error::I2CWrite(e))
@@ -789,18 +786,19 @@ where
     }
 
     fn set_gas_config(&mut self, gas_sett: GasSett) -> Result<(), <I2C as Read>::Error, <I2C as Write>::Error> {
-        let mut reg = Vec::with_capacity(2);
 
         if self.power_mode != PowerMode::ForcedMode {
             return Err(Bme680Error::DefinePwrMode);
         }
 
         // TODO check whether unwrap_or changes behaviour
-        reg.push((BME680_RES_HEAT0_ADDR, Calc::calc_heater_res(&self.calib, self.amb_temp, gas_sett.heatr_temp.unwrap_or(0))));
-        reg.push((BME680_GAS_WAIT0_ADDR, Calc::calc_heater_dur(gas_sett.heatr_dur.unwrap_or(0))));
+        let reg:[(u8,u8);2] = [
+            (BME680_RES_HEAT0_ADDR, Calc::calc_heater_res(&self.calib, self.amb_temp, gas_sett.heatr_temp.unwrap_or(0))),
+            (BME680_GAS_WAIT0_ADDR, Calc::calc_heater_dur(gas_sett.heatr_dur.unwrap_or(0)))
+        ];
 
         self.gas_sett.nb_conv = 0;
-        self.bme680_set_regs(reg.as_slice())
+        self.bme680_set_regs(&reg)
     }
 
     fn get_gas_config(&mut self) -> Result<GasSett, <I2C as Read>::Error, <I2C as Write>::Error> {
