@@ -48,14 +48,17 @@ fn main() -> result::Result<(), Bme680Error<<hal::I2cdev as i2c::Read>::Error , 
     info!("Sensor settings: {:?}", sensor_settings);
 
     loop {
-        thread::sleep(Duration::from_millis(profile_dur as u64));
+        thread::sleep(Duration::from_millis(5000));
         let power_mode = dev.get_sensor_mode();
         info!("Sensor power mode: {:?}", power_mode);
         info!("Setting forced power modes");
         dev.set_sensor_mode(PowerMode::ForcedMode)?;
         info!("Retrieving sensor data");
-        let data = dev.get_sensor_data()?;
+        let (data, state) = dev.get_sensor_data()?;
         info!("Sensor Data {:?}", data);
+        info!("Temperature {}°C", data.temperature_celsius());
+        info!("Pressure {}hPa", data.pressure_hpa());
+        info!("Humidity {}%", data.humidity_percent());
     }
     Ok(())
 }

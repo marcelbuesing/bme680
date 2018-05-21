@@ -289,6 +289,20 @@ impl Clone for FieldData {
     }
 }
 
+impl FieldData {
+    pub fn temperature_celsius(&self) -> f32 {
+        self.temperature as f32 / 100f32
+    }
+
+    pub fn pressure_hpa(&self) -> f32 {
+        self.pressure as f32 / 100f32
+    }
+
+    pub fn humidity_percent(&self) -> f32 {
+        self.humidity as f32 / 1000f32
+    }
+}
+
 /// TODO - replace naming of "State" with something better
 /// aka new_fields - BME680_NEW_DATA_MSK
 ///
@@ -471,7 +485,6 @@ where
 //            .map_err(|e| Bme680Error::I2CWrite(e))
     }
 
-    // TODO replace parameter desired_settings with safe flags
     // TODO replace all the NullPtr mess and split this into separate methods
     pub fn set_sensor_settings(
         &mut self,
@@ -500,12 +513,8 @@ where
             reg_addr = 0x75u8;
             let mut data = I2CUtil::read_byte(&mut self.i2c, self.dev_id, reg_addr)?;
 
-            // TODO duplicate check of condition ?
-            if desired_settings.contains(DesiredSensorSettings::FILTER_SEL) {
-                debug!("FILTER_SEL: true");
-                data = (data as (i32) & !0x1ci32 |tph_sett_filter as (i32) << 2i32 & 0x1ci32)
-                    as (u8);
-            }
+            debug!("FILTER_SEL: true");
+            data = (data as (i32) & !0x1ci32 |tph_sett_filter as (i32) << 2i32 & 0x1ci32) as (u8);
             reg.push((reg_addr, data));
         }
 
@@ -832,7 +841,6 @@ where
             data.status = data.status | buff[14] & BME680_HEAT_STAB_MSK;
 
             if data.status & BME680_NEW_DATA_MSK != 0 {
-
                 let (temp, t_fine) = Calc::calc_temperature(&self.calib, adc_temp);
                 debug!("adc_temp: {} adc_pres: {} adc_hum: {} adc_gas_res: {}, t_fine: {}", adc_temp, adc_pres, adc_hum, adc_gas_res, t_fine);
                 data.temperature = temp;
