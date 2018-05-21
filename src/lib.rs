@@ -808,14 +808,9 @@ where
 
         debug!("Buf {:?}, len: {}", buff, buff.len());
         let mut data: FieldData = Default::default();
-        let mut gas_range: u8;
-        let mut adc_temp: u32;
-        let mut adc_pres: u32;
-        let mut adc_hum: u16;
-        let mut adc_gas_res: u16;
-        let mut tries: u8 = 10u8;
 
-        loop {
+        const TRIES: u8 = 10;
+        for _ in 0..TRIES {
             I2CUtil::read_bytes(&mut self.i2c, self.dev_id, BME680_FIELD0_ADDR, &mut buff)?;
 
             debug!("Field data read {:?}, len: {}", buff, buff.len());
@@ -824,14 +819,14 @@ where
             data.gas_index = buff[0] & BME680_GAS_INDEX_MSK;;
             data.meas_index = buff[1];
 
-            adc_pres = (buff[2] as (u32)).wrapping_mul(4096) | (buff[3] as (u32)).wrapping_mul(16)
+            let adc_pres = (buff[2] as (u32)).wrapping_mul(4096) | (buff[3] as (u32)).wrapping_mul(16)
                 | (buff[4] as (u32)).wrapping_div(16);
-            adc_temp = (buff[5] as (u32)).wrapping_mul(4096) | (buff[6] as (u32)).wrapping_mul(16)
+            let adc_temp = (buff[5] as (u32)).wrapping_mul(4096) | (buff[6] as (u32)).wrapping_mul(16)
                 | (buff[7] as (u32)).wrapping_div(16);
-            adc_hum = ((buff[8] as (u32)).wrapping_mul(256) | buff[9] as (u32)) as (u16);
-            adc_gas_res = ((buff[13] as (u32)).wrapping_mul(4)
+            let adc_hum = ((buff[8] as (u32)).wrapping_mul(256) | buff[9] as (u32)) as (u16);
+            let adc_gas_res = ((buff[13] as (u32)).wrapping_mul(4)
                 | (buff[14] as (u32)).wrapping_div(64)) as (u16);
-            gas_range = buff[14] & BME680_GAS_RANGE_MSK;
+            let gas_range = buff[14] & BME680_GAS_RANGE_MSK;
 
             data.status = data.status | buff[14] & BME680_GASM_VALID_MSK;
             data.status = data.status | buff[14] & BME680_HEAT_STAB_MSK;
@@ -848,11 +843,6 @@ where
             }
 
             self.delay.delay_ms(BME680_POLL_PERIOD_MS);
-
-            tries = tries - 1;
-            if tries == 0 {
-                break;
-            }
         }
         Ok((data, FieldDataState::NoNewData))
     }
