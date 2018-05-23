@@ -6,36 +6,36 @@ extern crate log;
 extern crate bme680_rs;
 
 use bme680_rs::*;
+use embedded_hal::blocking::i2c;
 use hal::*;
-use embedded_hal::blocking::i2c as i2c;
-use std::thread;
 use std::result;
+use std::thread;
 use std::time::Duration;
 
-fn main() -> result::Result<(), Bme680Error<<hal::I2cdev as i2c::Read>::Error , <hal::I2cdev as i2c::Write>::Error>>{
-
+fn main() -> result::Result<
+    (),
+    Bme680Error<<hal::I2cdev as i2c::Read>::Error, <hal::I2cdev as i2c::Write>::Error>,
+> {
     env_logger::init();
 
     let i2c = I2cdev::new("/dev/i2c-1").unwrap();
 
-    let mut dev = Bme680_dev::init(i2c, Delay{}, 0x76, 25)?;
+    let mut dev = Bme680_dev::init(i2c, Delay {}, 0x76, 25)?;
 
     let mut sensor_settings: SensorSettings = Default::default();
 
-    sensor_settings.tph_sett.os_hum = Some(BME680_OS_2X);
-    sensor_settings.tph_sett.os_pres = Some(BME680_OS_4X);
-    sensor_settings.tph_sett.os_temp = Some(BME680_OS_8X);
+    sensor_settings.tph_sett.os_hum = Some(OversamplingSetting::OS2x);
+    sensor_settings.tph_sett.os_pres = Some(OversamplingSetting::OS4x);
+    sensor_settings.tph_sett.os_temp = Some(OversamplingSetting::OS8x);
     sensor_settings.tph_sett.filter = Some(2);
 
     sensor_settings.gas_sett.run_gas = Some(0x01);
     sensor_settings.gas_sett.heatr_dur = Some(1500);
     sensor_settings.gas_sett.heatr_temp = Some(320);
 
-    let settings_sel =
-        DesiredSensorSettings::OST_SEL |
-        DesiredSensorSettings::OSP_SEL |
-        DesiredSensorSettings::OSH_SEL |
-        DesiredSensorSettings::GAS_SENSOR_SEL;
+    let settings_sel = DesiredSensorSettings::OST_SEL | DesiredSensorSettings::OSP_SEL
+        | DesiredSensorSettings::OSH_SEL
+        | DesiredSensorSettings::GAS_SENSOR_SEL;
 
     let profile_dur = dev.get_profile_dur(&sensor_settings)?;
     info!("Duration {}", profile_dur);
