@@ -1,17 +1,17 @@
 use CalibData;
+use std::time::Duration;
 
 pub struct Calc {}
 
 impl Calc {
-
     pub fn calc_heater_res(calib: &CalibData, amb_temp: i8, temp: u16) -> u8 {
         // cap temperature
         let temp = if temp <= 400 { temp } else { 400 };
 
         let var1 = amb_temp as (i32) * calib.par_gh3 as (i32) / 1000i32 * 256i32;
         let var2 = (calib.par_gh1 as (i32) + 784i32)
-            * (((calib.par_gh2 as (i32) + 154009i32) * temp as (i32) * 5i32 / 100i32
-                + 3276800i32) / 10i32);
+            * (((calib.par_gh2 as (i32) + 154009i32) * temp as (i32) * 5i32 / 100i32 + 3276800i32)
+                / 10i32);
         let var3 = var1 + var2 / 2i32;
         let var4 = var3 / (calib.res_heat_range as (i32) + 4i32);
         let var5 = 131i32 * calib.res_heat_val as (i32) + 65536i32;
@@ -19,22 +19,25 @@ impl Calc {
         ((heatr_res_x100 + 50i32) / 100i32) as (u8)
     }
 
-    pub fn calc_heater_dur(dur: u16) -> u8 {
+    pub fn calc_heater_dur(duration: Duration) -> u8 {
         let mut factor: u8 = 0u8;
-        let mut dur = dur;
-        let durval =
-          if dur as (i32) >= 0xfc0i32 {
-              0xffu8 // Max duration
-          } else {
-              loop {
-                  if !(dur as (i32) > 0x3fi32) {
-                      break;
-                  }
-                  dur = (dur as (i32) / 4i32) as (u16);
-                  factor = (factor as (i32) + 1i32) as (u8);
-              }
-              (dur as (i32) + factor as (i32) * 64i32) as (u8)
-          };
+        // TODO replace once https://github.com/rust-lang/rust/pull/50167 has been merged
+        const MILLIS_PER_SEC: u64 = 1_000;
+        const NANOS_PER_MILLI: u64 = 1_000_000;
+        let mut dur = (duration.as_secs() as u64 * MILLIS_PER_SEC)
+            + (duration.subsec_nanos() as u64 / NANOS_PER_MILLI);
+        let durval = if dur as (i32) >= 0xfc0i32 {
+            0xffu8 // Max duration
+        } else {
+            loop {
+                if !(dur as (i32) > 0x3fi32) {
+                    break;
+                }
+                dur = (dur as (i32) / 4i32) as (u64);
+                factor = (factor as (i32) + 1i32) as (u8);
+            }
+            (dur as (i32) + factor as (i32) * 64i32) as (u8)
+        };
         durval
     }
 
@@ -65,8 +68,8 @@ impl Calc {
         } else {
             pressure_comp = ((pressure_comp << 1i32) as (u32)).wrapping_div(var1 as (u32)) as (i32);
         }
-        var1 = calib.par_p9 as (i32)
-            * ((pressure_comp >> 3i32) * (pressure_comp >> 3i32) >> 13i32) >> 12i32;
+        var1 = calib.par_p9 as (i32) * ((pressure_comp >> 3i32) * (pressure_comp >> 3i32) >> 13i32)
+            >> 12i32;
         var2 = (pressure_comp >> 2i32) * calib.par_p8 as (i32) >> 13i32;
         let var3: i32 = (pressure_comp >> 8i32) * (pressure_comp >> 8i32) * (pressure_comp >> 8i32)
             * calib.par_p10 as (i32) >> 17i32;
@@ -81,8 +84,8 @@ impl Calc {
             - (temp_scaled * calib.par_h3 as (i32) / 100i32 >> 1i32);
         let var2: i32 = calib.par_h2 as (i32)
             * (temp_scaled * calib.par_h4 as (i32) / 100i32
-                + (temp_scaled * (temp_scaled * calib.par_h5 as (i32) / 100i32) >> 6i32)
-                    / 100i32 + (1i32 << 14i32)) >> 10i32;
+                + (temp_scaled * (temp_scaled * calib.par_h5 as (i32) / 100i32) >> 6i32) / 100i32
+                + (1i32 << 14i32)) >> 10i32;
         let var3: i32 = var1 * var2;
         let var4: i32 = calib.par_h6 as (i32) << 7i32;
         let var4: i32 = var4 + temp_scaled * calib.par_h7 as (i32) / 100i32 >> 4i32;
@@ -134,8 +137,8 @@ impl Calc {
             250000u32,
             125000u32,
         ];
-        let var1: i64 = (1340 + 5 * calib.range_sw_err as i64)
-            * lookup_table1[gas_range as usize] as i64 >> 16;
+        let var1: i64 =
+            (1340 + 5 * calib.range_sw_err as i64) * lookup_table1[gas_range as usize] as i64 >> 16;
         let var2: u64 = (((gas_res_adc as i64) << 15) - 16777216 + var1) as (u64);
         let var3: i64 = lookup_table2[gas_range as usize] as i64 * var1 >> 9;
         let calc_gas_res: u32 = ((var3 + ((var2 as i64) >> 1i64)) / var2 as (i64)) as (u32);

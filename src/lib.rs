@@ -10,6 +10,7 @@ use calc::Calc;
 use hal::blocking::delay::DelayMs;
 use hal::blocking::i2c::{Read, Write};
 use std::result;
+use std::time::Duration;
 
 /** BME680 General config */
 pub const BME680_POLL_PERIOD_MS: u8 = 10;
@@ -262,7 +263,7 @@ pub struct GasSett {
     pub heatr_ctrl: Option<u8>,
     pub run_gas: Option<u8>,
     pub heatr_temp: Option<u16>,
-    pub heatr_dur: Option<u16>,
+    pub heatr_dur: Option<Duration>,
 }
 
 impl Clone for GasSett {
@@ -747,33 +748,39 @@ where
         Ok(PowerMode::from(mode))
     }
 
-    pub fn bme680_set_profile_dur(&mut self, tph_sett: TphSett, duration: u16) {
+    pub fn bme680_set_profile_dur(&mut self, tph_sett: TphSett, duration: Duration) {
         let os_to_meas_cycles: [u8; 6] = [0u8, 1u8, 2u8, 4u8, 8u8, 16u8];
         // TODO check if the following unwrap_ors do not change behaviour
+        // TODO replace once https://github.com/rust-lang/rust/pull/50167 has been merged
+        const MILLIS_PER_SEC: u64 = 1_000;
+        const NANOS_PER_MILLI: u64 = 1_000_000;
+        let millis = (duration.as_secs() as u64 * MILLIS_PER_SEC)
+            + (duration.subsec_nanos() as u64 / NANOS_PER_MILLI);
+
         let mut meas_cycles = os_to_meas_cycles
             [tph_sett.os_temp.unwrap_or(OversamplingSetting::OSNone) as (usize)]
-            as (u32);
+            as (u64);
         meas_cycles = meas_cycles.wrapping_add(
             os_to_meas_cycles[tph_sett.os_pres.unwrap_or(OversamplingSetting::OSNone) as (usize)]
-                as (u32),
+                as (u64),
         );
         meas_cycles = meas_cycles.wrapping_add(
             os_to_meas_cycles[tph_sett.os_hum.unwrap_or(OversamplingSetting::OSNone) as (usize)]
-                as (u32),
+                as (u64),
         );
-        let mut tph_dur = meas_cycles.wrapping_mul(1963u32);
-        tph_dur = tph_dur.wrapping_add(477u32.wrapping_mul(4u32));
-        tph_dur = tph_dur.wrapping_add(477u32.wrapping_mul(5u32));
-        tph_dur = tph_dur.wrapping_add(500u32);
-        tph_dur = tph_dur.wrapping_div(1000u32);
-        tph_dur = tph_dur.wrapping_add(1u32);
-        self.gas_sett.heatr_dur = Some((duration as (i32) - tph_dur as (u16) as (i32)) as (u16));
+        let mut tph_dur = meas_cycles.wrapping_mul(1963u64);
+        tph_dur = tph_dur.wrapping_add(477u64.wrapping_mul(4u64));
+        tph_dur = tph_dur.wrapping_add(477u64.wrapping_mul(5u64));
+        tph_dur = tph_dur.wrapping_add(500u64);
+        tph_dur = tph_dur.wrapping_div(1000u64);
+        tph_dur = tph_dur.wrapping_add(1u64);
+        self.gas_sett.heatr_dur = Some(Duration::from_millis(millis - tph_dur));
     }
 
     pub fn get_profile_dur(
         &self,
         sensor_settings: &SensorSettings,
-    ) -> Result<u16, <I2C as Read>::Error, <I2C as Write>::Error> {
+    ) -> Result<Duration, <I2C as Read>::Error, <I2C as Write>::Error> {
         let os_to_meas_cycles: [u8; 6] = [0u8, 1u8, 2u8, 4u8, 8u8, 16u8];
         // TODO check if the following unwrap_ors do not change behaviour
         let mut meas_cycles = os_to_meas_cycles[sensor_settings
@@ -802,7 +809,7 @@ where
         tph_dur = tph_dur.wrapping_add(500u32);
         tph_dur = tph_dur.wrapping_div(1000u32);
         tph_dur = tph_dur.wrapping_add(1u32);
-        let mut duration = tph_dur as (u16);
+        let mut duration = Duration::from_millis(tph_dur as u64);
         if sensor_settings.gas_sett.run_gas.unwrap_or(0) != 0 {
             duration = duration + sensor_settings.gas_sett.heatr_dur.expect("Heatrdur");
         }
@@ -903,7 +910,7 @@ where
             ),
             (
                 BME680_GAS_WAIT0_ADDR,
-                Calc::calc_heater_dur(gas_sett.heatr_dur.unwrap_or(0)),
+                Calc::calc_heater_dur(gas_sett.heatr_dur.unwrap_or(Duration::from_secs(0))),
             ),
         ];
 
@@ -914,15 +921,17 @@ where
     fn get_gas_config(&mut self) -> Result<GasSett, <I2C as Read>::Error, <I2C as Write>::Error> {
         // TODO move both GasSett fields to new struct
         let mut gas_sett: GasSett = Default::default();
+
         // TODO figure out if heat_temp and dur can be u8
         gas_sett.heatr_temp =
             Some(
                 I2CUtil::read_byte(&mut self.i2c, self.dev_id, BME680_ADDR_SENS_CONF_START)? as u16,
             );
-        gas_sett.heatr_dur =
-            Some(
-                I2CUtil::read_byte(&mut self.i2c, self.dev_id, BME680_ADDR_GAS_CONF_START)? as u16,
-            );
+
+        let heatr_dur_ms =
+            I2CUtil::read_byte(&mut self.i2c, self.dev_id, BME680_ADDR_GAS_CONF_START)? as u64;
+        gas_sett.heatr_dur = Some(Duration::from_millis(heatr_dur_ms));
+
         Ok(gas_sett)
     }
 

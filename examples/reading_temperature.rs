@@ -30,7 +30,7 @@ fn main() -> result::Result<
     sensor_settings.tph_sett.filter = Some(2);
 
     sensor_settings.gas_sett.run_gas = Some(0x01);
-    sensor_settings.gas_sett.heatr_dur = Some(1500);
+    sensor_settings.gas_sett.heatr_dur = Some(Duration::from_millis(1500));
     sensor_settings.gas_sett.heatr_temp = Some(320);
 
     let settings_sel = DesiredSensorSettings::OST_SEL | DesiredSensorSettings::OSP_SEL
@@ -38,7 +38,7 @@ fn main() -> result::Result<
         | DesiredSensorSettings::GAS_SENSOR_SEL;
 
     let profile_dur = dev.get_profile_dur(&sensor_settings)?;
-    info!("Duration {}", profile_dur);
+    info!("Duration {:?}", profile_dur);
     info!("Setting sensor settings");
     dev.set_sensor_settings(settings_sel, &sensor_settings)?;
     info!("Setting forced power modes");
@@ -54,11 +54,10 @@ fn main() -> result::Result<
         info!("Setting forced power modes");
         dev.set_sensor_mode(PowerMode::ForcedMode)?;
         info!("Retrieving sensor data");
-        let (data, state) = dev.get_sensor_data()?;
+        let (data, _state) = dev.get_sensor_data()?;
         info!("Sensor Data {:?}", data);
         info!("Temperature {}°C", data.temperature_celsius());
         info!("Pressure {}hPa", data.pressure_hpa());
         info!("Humidity {}%", data.humidity_percent());
     }
-    Ok(())
 }
