@@ -1,5 +1,5 @@
 use CalibData;
-use std::time::Duration;
+use core::time::Duration;
 
 pub struct Calc {}
 

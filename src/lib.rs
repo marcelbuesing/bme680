@@ -1,3 +1,5 @@
+#![no_std]
+
 #[macro_use]
 extern crate bitflags;
 extern crate embedded_hal as hal;
@@ -7,10 +9,10 @@ extern crate log;
 mod calc;
 
 use calc::Calc;
+use core::result;
+use core::time::Duration;
 use hal::blocking::delay::DelayMs;
 use hal::blocking::i2c::{Read, Write};
-use std::result;
-use std::time::Duration;
 
 /** BME680 General config */
 pub const BME680_POLL_PERIOD_MS: u8 = 10;
@@ -554,7 +556,7 @@ where
         let tph_sett = sensor_settings.tph_sett;
         let gas_sett = sensor_settings.gas_sett;
 
-        let mut reg = Vec::with_capacity(BME680_REG_BUFFER_LENGTH);
+        let mut reg: [(u8, u8); BME680_REG_BUFFER_LENGTH] = [(0, 0); BME680_REG_BUFFER_LENGTH];
         let intended_power_mode = self.power_mode;
 
         if desired_settings.contains(DesiredSensorSettings::GAS_MEAS_SEL) {
@@ -565,6 +567,7 @@ where
         let power_mode = self.power_mode;
         self.set_sensor_mode(power_mode)?;
 
+        let mut element_index = 0;
         /* Selecting the filter */
         if desired_settings.contains(DesiredSensorSettings::FILTER_SEL) {
             let tph_sett_filter = boundary_check::<I2C>(tph_sett.filter, 0, 7)?;
@@ -573,7 +576,8 @@ where
 
             debug!("FILTER_SEL: true");
             data = (data as (i32) & !0x1ci32 | tph_sett_filter as (i32) << 2i32 & 0x1ci32) as (u8);
-            reg.push((BME680_CONF_ODR_FILT_ADDR, data));
+            reg[element_index] = (BME680_CONF_ODR_FILT_ADDR, data);
+            element_index += 1;
         }
 
         if desired_settings.contains(DesiredSensorSettings::HCNTRL_SEL) {
@@ -582,7 +586,8 @@ where
             let mut data =
                 I2CUtil::read_byte(&mut self.i2c, self.dev_id, BME680_CONF_HEAT_CTRL_ADDR)?;
             data = (data as (i32) & !0x8i32 | gas_sett_heatr_ctrl as (i32) & 0x8) as (u8);
-            reg.push((BME680_CONF_HEAT_CTRL_ADDR, data));
+            reg[element_index] = (BME680_CONF_HEAT_CTRL_ADDR, data);
+            element_index += 1;
         }
 
         /* Selecting heater T,P oversampling for the sensor */
@@ -606,8 +611,8 @@ where
                 data = (data as (i32) & !0x1ci32 | tph_sett_os_pres as (i32) << 2i32 & 0x1ci32)
                     as (u8);
             }
-
-            reg.push((BME680_CONF_T_P_MODE_ADDR, data));
+            reg[element_index] = (BME680_CONF_T_P_MODE_ADDR, data);
+            element_index += 1;
         }
 
         /* Selecting humidity oversampling for the sensor */
@@ -616,7 +621,8 @@ where
             let tph_sett_os_hum = boundary_check::<I2C>(tph_sett.os_hum.map(|x| x as u8), 0, 5)?;
             let mut data = I2CUtil::read_byte(&mut self.i2c, self.dev_id, BME680_CONF_OS_H_ADDR)?;
             data = (data as (i32) & !0x7i32 | tph_sett_os_hum as (i32) & 0x7i32) as (u8);
-            reg.push((BME680_CONF_OS_H_ADDR, data));
+            reg[element_index] = (BME680_CONF_OS_H_ADDR, data);
+            element_index += 1;
         }
 
         /* Selecting the runGas and NB conversion settings for the sensor */
@@ -639,17 +645,17 @@ where
                 data = (data as (i32) & !0xfi32 | gas_sett_nb_conv as (i32) & 0xfi32) as (u8);
             }
 
-            reg.push((BME680_CONF_ODR_RUN_GAS_NBC_ADDR, data));
+            reg[element_index] = (BME680_CONF_ODR_RUN_GAS_NBC_ADDR, data);
+            element_index += 1;
         }
 
-        self.bme680_set_regs(reg.as_slice())?;
+        self.bme680_set_regs(&reg[0..element_index])?;
 
         /* Restore previous intended power mode */
         self.power_mode = intended_power_mode;
         Ok(())
     }
 
-    // TODO replace desired_settings with proper flags type see lib.rs
     pub fn get_sensor_settings(
         &mut self,
         desired_settings: DesiredSensorSettings,
@@ -833,18 +839,23 @@ where
     {
         let mut calib: CalibData = Default::default();
 
-        // TODO figure out how to avoid allocating twice
-        let mut coeff_vec = Vec::with_capacity(BME680_COEFF_SIZE);
-        let mut coeff_array_1: [u8; BME680_COEFF_ADDR1_LEN] = [0; BME680_COEFF_ADDR1_LEN];
-        let mut coeff_array_2: [u8; BME680_COEFF_ADDR2_LEN] = [0; BME680_COEFF_ADDR2_LEN];
+        let mut coeff_array: [u8; (BME680_COEFF_ADDR1_LEN + BME680_COEFF_ADDR2_LEN)] =
+            [0; (BME680_COEFF_ADDR1_LEN + BME680_COEFF_ADDR2_LEN)];
 
-        I2CUtil::read_bytes::<I2CX>(i2c, dev_id, BME680_COEFF_ADDR1, &mut coeff_array_1)?;
+        I2CUtil::read_bytes::<I2CX>(
+            i2c,
+            dev_id,
+            BME680_COEFF_ADDR1,
+            &mut coeff_array[0..(BME680_COEFF_ADDR1_LEN - 1)],
+        )?;
 
-        I2CUtil::read_bytes::<I2CX>(i2c, dev_id, BME680_COEFF_ADDR2, &mut coeff_array_2)?;
-
-        coeff_vec.extend_from_slice(&coeff_array_1);
-        coeff_vec.extend_from_slice(&coeff_array_2);
-        let coeff_array = coeff_vec.as_slice();
+        I2CUtil::read_bytes::<I2CX>(
+            i2c,
+            dev_id,
+            BME680_COEFF_ADDR2,
+            &mut coeff_array
+                [BME680_COEFF_ADDR1_LEN..(BME680_COEFF_ADDR1_LEN + BME680_COEFF_ADDR2_LEN - 1)],
+        )?;
 
         calib.par_t1 = (coeff_array[34usize] as (u16) as (i32) << 8i32
             | coeff_array[33usize] as (u16) as (i32)) as (u16);
