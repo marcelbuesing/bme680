@@ -1,3 +1,9 @@
+//! This crate is a pure Rust implementation for the BME680  environmental sensor.
+//! The library can be used to read the gas, pressure, humidity and temperature sensors via I²C.
+//!
+//! The library uses the embedded-hal crate to abstract reading and writing via I²C.
+//! In the examples you can find a demo how to use the library in Linux using the linux-embedded-hal crate (e.g. on a RPI).
+
 #![no_std]
 
 #[macro_use]
