@@ -1,11 +1,11 @@
+extern crate bme680;
 extern crate embedded_hal;
 extern crate env_logger;
 extern crate linux_embedded_hal as hal;
 #[macro_use]
 extern crate log;
-extern crate bme680_rs;
 
-use bme680_rs::*;
+use bme680::*;
 use embedded_hal::blocking::i2c;
 use hal::*;
 use std::result;

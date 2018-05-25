@@ -1,7 +1,8 @@
 [package]
-name = "bme680-rs"
+name = "bme680"
 version = "0.1.0"
 authors = ["marcelbuesing <buesing.marcel@googlemail.com>"]
+repository = "https://github.com/marcelbuesing/bme680-hal"
 
 [dependencies]
 bitflags = "1.0"
