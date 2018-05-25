@@ -136,10 +136,6 @@ pub const BME680_GAS_SENSOR_SEL: u16 = BME680_GAS_MEAS_SEL | BME680_RUN_GAS_SEL 
 #[derive(Debug)]
 pub enum Bme680Error<R, W> {
     ///
-    /// aka BME680_E_NULL_PTR
-    ///
-    NulltPtr,
-    ///
     /// aka BME680_E_COM_FAIL
     ///
     I2CWrite(W),
@@ -163,7 +159,7 @@ pub enum Bme680Error<R, W> {
     ///
     /// Warning Boundary Check
     ///
-    BoundaryCheckFailure(InfoMsg, u8, u8),
+    BoundaryCheckFailure(&'static str),
 }
 
 //impl<I2C> From<<I2C as Read>::Error> for Bme680Error<<I2C as Read>::Error, <I2C as Write>::Error>
@@ -285,15 +281,6 @@ pub enum FieldDataCondition {
     Unchanged,
 }
 
-/// Infos
-bitflags! {
-    #[derive(Default)]
-    pub struct InfoMsg: u8 {
-        const MIN_CORRECTION = 1;
-        const MAX_CORRECTION = 2;
-    }
-}
-
 pub struct I2CUtil {}
 
 impl I2CUtil {
@@ -352,30 +339,25 @@ pub struct Bme680_dev<I2C, D> {
 
 fn boundary_check<I2C>(
     value: Option<u8>,
+    value_name: &'static str,
     min: u8,
     max: u8,
 ) -> Result<u8, <I2C as Read>::Error, <I2C as Write>::Error>
 where
     I2C: Read + Write,
 {
-    let mut info_msg: InfoMsg = Default::default();
-
-    // TODO give the nullptr here a different name
-    let value = value.unwrap();
+    let value = value.ok_or(Bme680Error::BoundaryCheckFailure(value_name))?;
 
     if value < min {
-        error!("Boundary check failure max correction, {} < {}", value, min);
-        info_msg |= InfoMsg::MIN_CORRECTION;
+        const MIN: &str = "Boundary check failure, value exceeds maximum";
+        error!("{}, value name: {}", MIN, value_name);
+        return Err(Bme680Error::BoundaryCheckFailure(MIN));
     }
 
     if value > max {
-        error!("Boundary check failure max correction, {} > {}", value, max);
-        info_msg |= InfoMsg::MAX_CORRECTION;
-    }
-
-    if !info_msg.is_empty() {
-        error!("Boundary check failure");
-        return Err(Bme680Error::BoundaryCheckFailure(info_msg, min, max));
+        const MAX: &str = "Boundary check, value exceeds minimum";
+        error!("{}, value name: {}", MAX, value_name);
+        return Err(Bme680Error::BoundaryCheckFailure(MAX));
     }
     Ok(value)
 }
@@ -454,13 +436,8 @@ where
         }
 
         Ok(())
-
-        //        self.i2c
-        //            .write(self.dev_id, tmp_buff.as_slice())
-        //            .map_err(|e| Bme680Error::I2CWrite(e))
     }
 
-    // TODO replace all the NullPtr mess and split this into separate methods
     pub fn set_sensor_settings(
         &mut self,
         desired_settings: DesiredSensorSettings,
@@ -483,7 +460,7 @@ where
         let mut element_index = 0;
         /* Selecting the filter */
         if desired_settings.contains(DesiredSensorSettings::FILTER_SEL) {
-            let tph_sett_filter = boundary_check::<I2C>(tph_sett.filter, 0, 7)?;
+            let tph_sett_filter = boundary_check::<I2C>(tph_sett.filter, "TphSett.filter", 0, 7)?;
             let mut data =
                 I2CUtil::read_byte(&mut self.i2c, self.dev_id, BME680_CONF_ODR_FILT_ADDR)?;
 
@@ -495,7 +472,8 @@ where
 
         if desired_settings.contains(DesiredSensorSettings::HCNTRL_SEL) {
             debug!("HCNTRL_SEL: true");
-            let gas_sett_heatr_ctrl = boundary_check::<I2C>(gas_sett.heatr_ctrl, 0x0u8, 0x8u8)?;
+            let gas_sett_heatr_ctrl =
+                boundary_check::<I2C>(gas_sett.heatr_ctrl, "GasSett.heatr_ctrl", 0x0u8, 0x8u8)?;
             let mut data =
                 I2CUtil::read_byte(&mut self.i2c, self.dev_id, BME680_CONF_HEAT_CTRL_ADDR)?;
             data = (data as (i32) & !0x8i32 | gas_sett_heatr_ctrl as (i32) & 0x8) as (u8);
@@ -512,8 +490,12 @@ where
 
             if desired_settings.contains(DesiredSensorSettings::OST_SEL) {
                 debug!("OST_SEL: true");
-                let tph_sett_os_temp =
-                    boundary_check::<I2C>(tph_sett.os_temp.map(|x| x as u8), 0, 5)?;
+                let tph_sett_os_temp = boundary_check::<I2C>(
+                    tph_sett.os_temp.map(|x| x as u8),
+                    "TphSett.os_temp",
+                    0,
+                    5,
+                )?;
                 data = (data as (i32) & !0xe0i32 | tph_sett_os_temp as (i32) << 5i32 & 0xe0i32)
                     as (u8);
             }
@@ -531,7 +513,8 @@ where
         /* Selecting humidity oversampling for the sensor */
         if desired_settings.contains(DesiredSensorSettings::OSH_SEL) {
             debug!("OSH_SEL: true");
-            let tph_sett_os_hum = boundary_check::<I2C>(tph_sett.os_hum.map(|x| x as u8), 0, 5)?;
+            let tph_sett_os_hum =
+                boundary_check::<I2C>(tph_sett.os_hum.map(|x| x as u8), "TphSett.os_hum", 0, 5)?;
             let mut data = I2CUtil::read_byte(&mut self.i2c, self.dev_id, BME680_CONF_OS_H_ADDR)?;
             data = (data as (i32) & !0x7i32 | tph_sett_os_hum as (i32) & 0x7i32) as (u8);
             reg[element_index] = (BME680_CONF_OS_H_ADDR, data);
@@ -547,14 +530,16 @@ where
 
             if desired_settings.contains(DesiredSensorSettings::RUN_GAS_SEL) {
                 debug!("RUN_GAS_SEL: true");
-                let gas_sett_run_gas = boundary_check::<I2C>(gas_sett.run_gas, 0, 1)?;
+                let gas_sett_run_gas =
+                    boundary_check::<I2C>(gas_sett.run_gas, "GasSett.run_gas", 0, 1)?;
                 data = (data as (i32) & !0x10i32 | gas_sett_run_gas as (i32) << 4i32 & 0x10i32)
                     as (u8);
             }
 
             if desired_settings.contains(DesiredSensorSettings::NBCONV_SEL) {
                 debug!("NBCONV_SEL: true");
-                let gas_sett_nb_conv = boundary_check::<I2C>(Some(gas_sett.nb_conv), 0, 10)?;
+                let gas_sett_nb_conv =
+                    boundary_check::<I2C>(Some(gas_sett.nb_conv), "GasSett.nb_conv", 0, 10)?;
                 data = (data as (i32) & !0xfi32 | gas_sett_nb_conv as (i32) & 0xfi32) as (u8);
             }
 
