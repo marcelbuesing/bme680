@@ -6,9 +6,14 @@ extern crate embedded_hal as hal;
 #[macro_use]
 extern crate log;
 
+pub use self::settings::{DesiredSensorSettings, GasSett, OversamplingSetting, SensorSettings,
+                         TphSett};
+
 mod calc;
+mod settings;
 
 use calc::Calc;
+
 use core::result;
 use core::time::Duration;
 use hal::blocking::delay::DelayMs;
@@ -52,15 +57,6 @@ pub const BME680_ADDR_SENS_CONF_START: u8 = 0x5A;
 pub const BME680_ADDR_GAS_CONF_START: u8 = 0x64;
 
 pub const BME680_SOFT_RESET_ADDR: u8 = 0xe0;
-
-/** Over-sampling settings */
-// TODO replace with enum/flags
-pub const BME680_OS_NONE: u8 = 0;
-pub const BME680_OS_1X: u8 = 1;
-pub const BME680_OS_2X: u8 = 2;
-pub const BME680_OS_4X: u8 = 3;
-pub const BME680_OS_8X: u8 = 4;
-pub const BME680_OS_16X: u8 = 5;
 
 /** Field settings */
 pub const BME680_FIELD0_ADDR: u8 = 0x1d;
@@ -245,37 +241,6 @@ impl Clone for CalibData {
 
 #[derive(Debug, Default, Copy)]
 #[repr(C)]
-pub struct TphSett {
-    pub os_hum: Option<OversamplingSetting>,
-    pub os_temp: Option<OversamplingSetting>,
-    pub os_pres: Option<OversamplingSetting>,
-    pub filter: Option<u8>,
-}
-
-impl Clone for TphSett {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-#[derive(Debug, Default, Copy)]
-#[repr(C)]
-pub struct GasSett {
-    pub nb_conv: u8,
-    pub heatr_ctrl: Option<u8>,
-    pub run_gas: Option<u8>,
-    pub heatr_temp: Option<u16>,
-    pub heatr_dur: Option<Duration>,
-}
-
-impl Clone for GasSett {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-#[derive(Debug, Default, Copy)]
-#[repr(C)]
 pub struct FieldData {
     pub status: u8,
     pub gas_index: u8,
@@ -306,14 +271,18 @@ impl FieldData {
     }
 }
 
-/// TODO - replace naming of "State" with something better
 /// aka new_fields - BME680_NEW_DATA_MSK
 ///
 #[derive(Debug)]
-pub enum FieldDataState {
+pub enum FieldDataCondition {
+    ///
+    /// Data changed since last read
+    ///
     NewData,
-    // TODO find better naming to no new data
-    NoNewData,
+    ///
+    /// Data has not changed since last read
+    ///
+    Unchanged,
 }
 
 /// Infos
@@ -322,62 +291,6 @@ bitflags! {
     pub struct InfoMsg: u8 {
         const MIN_CORRECTION = 1;
         const MAX_CORRECTION = 2;
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct SensorSettings {
-    pub gas_sett: GasSett,
-    pub tph_sett: TphSett,
-}
-
-bitflags! {
-    pub struct DesiredSensorSettings: u16 {
-        /// To set temperature oversampling
-        const OST_SEL = 1;
-        /// To set pressure oversampling.
-        const OSP_SEL = 2;
-
-        /// To set humidity oversampling.
-        const OSH_SEL = 4;
-        /// To set gas measurement setting.
-        const GAS_MEAS_SEL = 8;
-        /// To set filter setting.
-        const FILTER_SEL = 16;
-        /// To set humidity control setting.
-        const HCNTRL_SEL = 32;
-        /// To set run gas setting.
-        const RUN_GAS_SEL = 64;
-        /// To set NB conversion setting.
-        const NBCONV_SEL = 128;
-        /// To set all gas sensor related settings
-        const GAS_SENSOR_SEL = Self::GAS_MEAS_SEL.bits | Self::RUN_GAS_SEL.bits | Self::NBCONV_SEL.bits;
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
-#[repr(u8)]
-pub enum OversamplingSetting {
-    OSNone = 0,
-    OS1x = 1,
-    OS2x = 2,
-    OS4x = 3,
-    OS8x = 4,
-    OS16x = 5,
-}
-
-impl OversamplingSetting {
-    // TODO replace with TryFrom once stabilized
-    fn from(os: u8) -> OversamplingSetting {
-        match os {
-            0 => OversamplingSetting::OSNone,
-            1 => OversamplingSetting::OS1x,
-            2 => OversamplingSetting::OS2x,
-            3 => OversamplingSetting::OS4x,
-            4 => OversamplingSetting::OS8x,
-            5 => OversamplingSetting::OS16x,
-            _ => panic!("Unknown oversampling setting: {}", os),
-        }
     }
 }
 
@@ -678,18 +591,15 @@ where
         if desired_settings
             .contains(DesiredSensorSettings::OST_SEL | DesiredSensorSettings::OSP_SEL)
         {
-            sensor_settings.tph_sett.os_temp = Some(OversamplingSetting::from(
-                ((data_array[4usize] as (i32) & 0xe0i32) >> 5i32) as (u8),
-            ));
-            sensor_settings.tph_sett.os_pres = Some(OversamplingSetting::from(
-                ((data_array[4usize] as (i32) & 0x1ci32) >> 2i32) as (u8),
-            ));
+            let os_temp: u8 = ((data_array[4usize] as (i32) & 0xe0i32) >> 5i32) as (u8);
+            let os_pres: u8 = ((data_array[4usize] as (i32) & 0x1ci32) >> 2i32) as (u8);
+            sensor_settings.tph_sett.os_temp = Some(OversamplingSetting::from_u8(os_temp));
+            sensor_settings.tph_sett.os_pres = Some(OversamplingSetting::from_u8(os_pres));
         }
 
         if desired_settings.contains(DesiredSensorSettings::OSH_SEL) {
-            sensor_settings.tph_sett.os_hum = Some(OversamplingSetting::from(
-                (data_array[2usize] as (i32) & 0x7i32) as (u8),
-            ));
+            let os_hum: u8 = (data_array[2usize] as (i32) & 0x7i32) as (u8);
+            sensor_settings.tph_sett.os_hum = Some(OversamplingSetting::from_u8(os_hum));
         }
 
         if desired_settings.contains(DesiredSensorSettings::HCNTRL_SEL) {
@@ -822,14 +732,6 @@ where
         Ok(duration)
     }
 
-    // TODO remove
-    /// @returns (FieldData, IsNewFields)
-    pub fn get_sensor_data(
-        &mut self,
-    ) -> Result<(FieldData, FieldDataState), <I2C as Read>::Error, <I2C as Write>::Error> {
-        self.read_field_data()
-    }
-
     fn get_calib_data<I2CX>(
         i2c: &mut I2CX,
         dev_id: u8,
@@ -930,10 +832,8 @@ where
     }
 
     fn get_gas_config(&mut self) -> Result<GasSett, <I2C as Read>::Error, <I2C as Write>::Error> {
-        // TODO move both GasSett fields to new struct
         let mut gas_sett: GasSett = Default::default();
 
-        // TODO figure out if heat_temp and dur can be u8
         gas_sett.heatr_temp =
             Some(
                 I2CUtil::read_byte(&mut self.i2c, self.dev_id, BME680_ADDR_SENS_CONF_START)? as u16,
@@ -946,9 +846,9 @@ where
         Ok(gas_sett)
     }
 
-    fn read_field_data(
+    pub fn get_sensor_data(
         &mut self,
-    ) -> Result<(FieldData, FieldDataState), <I2C as Read>::Error, <I2C as Write>::Error> {
+    ) -> Result<(FieldData, FieldDataCondition), <I2C as Read>::Error, <I2C as Write>::Error> {
         let mut buff: [u8; BME680_FIELD_LENGTH] = [0; BME680_FIELD_LENGTH];
 
         debug!("Buf {:?}, len: {}", buff, buff.len());
@@ -961,7 +861,7 @@ where
             debug!("Field data read {:?}, len: {}", buff, buff.len());
 
             data.status = buff[0] & BME680_NEW_DATA_MSK;
-            data.gas_index = buff[0] & BME680_GAS_INDEX_MSK;;
+            data.gas_index = buff[0] & BME680_GAS_INDEX_MSK;
             data.meas_index = buff[1];
 
             let adc_pres = (buff[2] as (u32)).wrapping_mul(4096)
@@ -989,11 +889,11 @@ where
                 data.humidity = Calc::calc_humidity(&self.calib, t_fine, adc_hum);
                 data.gas_resistance =
                     Calc::calc_gas_resistance(&self.calib, adc_gas_res, gas_range);
-                return Ok((data, FieldDataState::NewData));
+                return Ok((data, FieldDataCondition::NewData));
             }
 
             self.delay.delay_ms(BME680_POLL_PERIOD_MS);
         }
-        Ok((data, FieldDataState::NoNewData))
+        Ok((data, FieldDataCondition::Unchanged))
     }
 }
