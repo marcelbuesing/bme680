@@ -2,7 +2,10 @@
 name = "bme680"
 version = "0.1.0"
 authors = ["marcelbuesing <buesing.marcel@googlemail.com>"]
+description = "A pure Rust implementation for the BME680 environmental sensor."
 repository = "https://github.com/marcelbuesing/bme680-hal"
+documentation = "https://docs.rs/bme680"
+license = "MIT"
 
 [dependencies]
 bitflags = "1.0"
