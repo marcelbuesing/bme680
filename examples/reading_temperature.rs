@@ -20,7 +20,7 @@ fn main() -> result::Result<
 
     let i2c = I2cdev::new("/dev/i2c-1").unwrap();
 
-    let mut dev = Bme680_dev::init(i2c, Delay {}, 0x76, 25)?;
+    let mut dev = Bme680_dev::init(i2c, Delay {}, I2CAddress::Primary, 25)?;
 
     let mut sensor_settings: SensorSettings = Default::default();
 
@@ -59,5 +59,6 @@ fn main() -> result::Result<
         info!("Temperature {}°C", data.temperature_celsius());
         info!("Pressure {}hPa", data.pressure_hpa());
         info!("Humidity {}%", data.humidity_percent());
+        info!("Gas Resistence {}Ω", data.gas_resistance_ohm());
     }
 }

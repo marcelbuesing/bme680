@@ -28,10 +28,6 @@ use hal::blocking::i2c::{Read, Write};
 /** BME680 General config */
 pub const BME680_POLL_PERIOD_MS: u8 = 10;
 
-/** BME680 I2C addresses */
-pub const BME680_I2C_ADDR_PRIMARY: u8 = 0x76;
-pub const BME680_I2C_ADDR_SECONDARY: u8 = 0x77;
-
 /** BME680 unique chip identifier */
 pub const BME680_CHIP_ID: u8 = 0x61;
 
@@ -168,13 +164,6 @@ pub enum Bme680Error<R, W> {
     BoundaryCheckFailure(&'static str),
 }
 
-//impl<I2C> From<<I2C as Read>::Error> for Bme680Error<<I2C as Read>::Error, <I2C as Write>::Error>
-//    where I2C: Read + Write {
-//    fn from(e: <I2C as Read>::Error) {
-//        Bme680Error::I2CRead(e)
-//    }
-//}
-
 pub type Result<T, R, W> = result::Result<T, Bme680Error<R, W>>;
 
 ///
@@ -201,6 +190,40 @@ impl PowerMode {
             PowerMode::SleepMode => BME680_SLEEP_MODE,
             PowerMode::ForcedMode => BME680_FORCED_MODE,
         }
+    }
+}
+
+///
+/// I2C Slave Address
+/// To determine the slave address of your device you can use `i2cdetect -y 1` on linux.
+/// The 7-bit device address is 111011x. The 6 MSB bits are fixed.
+/// The last bit is changeable by SDO value and can be changed during operation.
+/// Connecting SDO to GND results in slave address 1110110 (0x76); connection it to V DDIO results in slave
+/// address 1110111 (0x77), which is the same as BMP280’s I2C address.
+///
+#[derive(Debug, Clone, Copy)]
+pub enum I2CAddress {
+    /// Primary Slave Address 0x77
+    Primary,
+    /// Secondary Slave Address 0x77
+    Secondary,
+    /// Alternative address
+    Other(u8),
+}
+
+impl I2CAddress {
+    pub fn addr(&self) -> u8 {
+        match &self {
+            I2CAddress::Primary => 0x76u8,
+            I2CAddress::Secondary => 0x77u8,
+            I2CAddress::Other(addr) => addr.clone(),
+        }
+    }
+}
+
+impl Default for I2CAddress {
+    fn default() -> I2CAddress {
+        I2CAddress::Primary
     }
 }
 
@@ -244,13 +267,16 @@ impl Clone for CalibData {
 #[derive(Debug, Default, Copy)]
 #[repr(C)]
 pub struct FieldData {
-    pub status: u8,
-    pub gas_index: u8,
-    pub meas_index: u8,
-    pub temperature: i16,
-    pub pressure: u32,
-    pub humidity: u32,
-    pub gas_resistance: u32,
+    /// Contains new_data, gasm_valid & heat_stab
+    status: u8,
+    /// Index of heater profile used
+    gas_index: u8,
+    /// Measurement index
+    meas_index: u8,
+    temperature: i16,
+    pressure: u32,
+    humidity: u32,
+    gas_resistance: u32,
 }
 
 impl Clone for FieldData {
@@ -260,16 +286,23 @@ impl Clone for FieldData {
 }
 
 impl FieldData {
+    /// Temperature in degree celsius (°C)
     pub fn temperature_celsius(&self) -> f32 {
         self.temperature as f32 / 100f32
     }
 
+    /// Pressure in hectopascal (hPA)
     pub fn pressure_hpa(&self) -> f32 {
         self.pressure as f32 / 100f32
     }
 
+    /// Humidity in % relative humidity
     pub fn humidity_percent(&self) -> f32 {
         self.humidity as f32 / 1000f32
+    }
+
+    pub fn gas_resistance_ohm(&self) -> u32 {
+        self.gas_resistance
     }
 }
 
@@ -332,7 +365,7 @@ impl I2CUtil {
 pub struct Bme680_dev<I2C, D> {
     i2c: I2C,
     delay: D,
-    dev_id: u8,
+    dev_id: I2CAddress,
     amb_temp: i8,
     calib: CalibData,
     // TODO remove ? as it may not reflect the state of the device
@@ -376,11 +409,11 @@ where
     pub fn soft_reset(
         i2c: &mut I2C,
         delay: &mut D,
-        dev_id: u8,
+        dev_id: I2CAddress,
     ) -> Result<(), <I2C as Read>::Error, <I2C as Write>::Error> {
         let tmp_buff: [u8; 2] = [BME680_SOFT_RESET_ADDR, BME680_SOFT_RESET_CMD];
 
-        i2c.write(dev_id, &tmp_buff)
+        i2c.write(dev_id.addr(), &tmp_buff)
             .map_err(|e| Bme680Error::I2CWrite(e))?;
 
         delay.delay_ms(BME680_RESET_PERIOD);
@@ -390,14 +423,14 @@ where
     pub fn init(
         mut i2c: I2C,
         mut delay: D,
-        dev_id: u8,
+        dev_id: I2CAddress,
         ambient_temperature: i8,
     ) -> Result<Bme680_dev<I2C, D>, <I2C as Read>::Error, <I2C as Write>::Error> {
         Bme680_dev::soft_reset(&mut i2c, &mut delay, dev_id)?;
 
         debug!("Reading chip id");
         /* Soft reset to restore it to default values*/
-        let chip_id = I2CUtil::read_byte::<I2C>(&mut i2c, dev_id, BME680_CHIP_ID_ADDR)?;
+        let chip_id = I2CUtil::read_byte::<I2C>(&mut i2c, dev_id.addr(), BME680_CHIP_ID_ADDR)?;
         debug!("Chip id: {}", chip_id);
 
         if chip_id == BME680_CHIP_ID {
@@ -437,7 +470,7 @@ where
                 reg_addr, tmp_buff
             );
             self.i2c
-                .write(self.dev_id, &tmp_buff)
+                .write(self.dev_id.addr(), &tmp_buff)
                 .map_err(|e| Bme680Error::I2CWrite(e))?;
         }
 
@@ -468,7 +501,7 @@ where
         if desired_settings.contains(DesiredSensorSettings::FILTER_SEL) {
             let tph_sett_filter = boundary_check::<I2C>(tph_sett.filter, "TphSett.filter", 0, 7)?;
             let mut data =
-                I2CUtil::read_byte(&mut self.i2c, self.dev_id, BME680_CONF_ODR_FILT_ADDR)?;
+                I2CUtil::read_byte(&mut self.i2c, self.dev_id.addr(), BME680_CONF_ODR_FILT_ADDR)?;
 
             debug!("FILTER_SEL: true");
             data = (data as (i32) & !0x1ci32 | tph_sett_filter as (i32) << 2i32 & 0x1ci32) as (u8);
@@ -480,8 +513,11 @@ where
             debug!("HCNTRL_SEL: true");
             let gas_sett_heatr_ctrl =
                 boundary_check::<I2C>(gas_sett.heatr_ctrl, "GasSett.heatr_ctrl", 0x0u8, 0x8u8)?;
-            let mut data =
-                I2CUtil::read_byte(&mut self.i2c, self.dev_id, BME680_CONF_HEAT_CTRL_ADDR)?;
+            let mut data = I2CUtil::read_byte(
+                &mut self.i2c,
+                self.dev_id.addr(),
+                BME680_CONF_HEAT_CTRL_ADDR,
+            )?;
             data = (data as (i32) & !0x8i32 | gas_sett_heatr_ctrl as (i32) & 0x8) as (u8);
             reg[element_index] = (BME680_CONF_HEAT_CTRL_ADDR, data);
             element_index += 1;
@@ -492,7 +528,7 @@ where
             .contains(DesiredSensorSettings::OST_SEL | DesiredSensorSettings::OSP_SEL)
         {
             let mut data =
-                I2CUtil::read_byte(&mut self.i2c, self.dev_id, BME680_CONF_T_P_MODE_ADDR)?;
+                I2CUtil::read_byte(&mut self.i2c, self.dev_id.addr(), BME680_CONF_T_P_MODE_ADDR)?;
 
             if desired_settings.contains(DesiredSensorSettings::OST_SEL) {
                 debug!("OST_SEL: true");
@@ -521,7 +557,8 @@ where
             debug!("OSH_SEL: true");
             let tph_sett_os_hum =
                 boundary_check::<I2C>(tph_sett.os_hum.map(|x| x as u8), "TphSett.os_hum", 0, 5)?;
-            let mut data = I2CUtil::read_byte(&mut self.i2c, self.dev_id, BME680_CONF_OS_H_ADDR)?;
+            let mut data =
+                I2CUtil::read_byte(&mut self.i2c, self.dev_id.addr(), BME680_CONF_OS_H_ADDR)?;
             data = (data as (i32) & !0x7i32 | tph_sett_os_hum as (i32) & 0x7i32) as (u8);
             reg[element_index] = (BME680_CONF_OS_H_ADDR, data);
             element_index += 1;
@@ -531,8 +568,11 @@ where
         if desired_settings
             .contains(DesiredSensorSettings::RUN_GAS_SEL | DesiredSensorSettings::NBCONV_SEL)
         {
-            let mut data =
-                I2CUtil::read_byte(&mut self.i2c, self.dev_id, BME680_CONF_ODR_RUN_GAS_NBC_ADDR)?;
+            let mut data = I2CUtil::read_byte(
+                &mut self.i2c,
+                self.dev_id.addr(),
+                BME680_CONF_ODR_RUN_GAS_NBC_ADDR,
+            )?;
 
             if desired_settings.contains(DesiredSensorSettings::RUN_GAS_SEL) {
                 debug!("RUN_GAS_SEL: true");
@@ -568,7 +608,7 @@ where
         let mut data_array: [u8; BME680_REG_BUFFER_LENGTH] = [0; BME680_REG_BUFFER_LENGTH];
         let mut sensor_settings: SensorSettings = Default::default();
 
-        I2CUtil::read_bytes(&mut self.i2c, self.dev_id, reg_addr, &mut data_array)?;
+        I2CUtil::read_bytes(&mut self.i2c, self.dev_id.addr(), reg_addr, &mut data_array)?;
 
         if desired_settings.contains(DesiredSensorSettings::GAS_MEAS_SEL) {
             sensor_settings.gas_sett = self.get_gas_config()?;
@@ -619,7 +659,7 @@ where
         /* Call repeatedly until in sleep */
         loop {
             tmp_pow_mode =
-                I2CUtil::read_byte(&mut self.i2c, self.dev_id, BME680_CONF_T_P_MODE_ADDR)?;
+                I2CUtil::read_byte(&mut self.i2c, self.dev_id.addr(), BME680_CONF_T_P_MODE_ADDR)?;
 
             /* Put to sleep before changing mode */
             current_power_mode = PowerMode::from(tmp_pow_mode & BME680_MODE_MSK);
@@ -650,7 +690,8 @@ where
     pub fn get_sensor_mode(
         &mut self,
     ) -> Result<PowerMode, <I2C as Read>::Error, <I2C as Write>::Error> {
-        let regs = I2CUtil::read_byte(&mut self.i2c, self.dev_id, BME680_CONF_T_P_MODE_ADDR)?;
+        let regs =
+            I2CUtil::read_byte(&mut self.i2c, self.dev_id.addr(), BME680_CONF_T_P_MODE_ADDR)?;
         let mode = regs & BME680_MODE_MSK;
         Ok(PowerMode::from(mode))
     }
@@ -725,7 +766,7 @@ where
 
     fn get_calib_data<I2CX>(
         i2c: &mut I2CX,
-        dev_id: u8,
+        dev_id: I2CAddress,
     ) -> Result<CalibData, <I2CX as Read>::Error, <I2CX as Write>::Error>
     where
         I2CX: Read + Write,
@@ -737,14 +778,14 @@ where
 
         I2CUtil::read_bytes::<I2CX>(
             i2c,
-            dev_id,
+            dev_id.addr(),
             BME680_COEFF_ADDR1,
             &mut coeff_array[0..(BME680_COEFF_ADDR1_LEN - 1)],
         )?;
 
         I2CUtil::read_bytes::<I2CX>(
             i2c,
-            dev_id,
+            dev_id.addr(),
             BME680_COEFF_ADDR2,
             &mut coeff_array
                 [BME680_COEFF_ADDR1_LEN..(BME680_COEFF_ADDR1_LEN + BME680_COEFF_ADDR2_LEN - 1)],
@@ -786,13 +827,14 @@ where
         calib.par_gh3 = coeff_array[38usize] as (i8);
 
         calib.res_heat_range =
-            (I2CUtil::read_byte::<I2CX>(i2c, dev_id, BME680_ADDR_RES_HEAT_RANGE_ADDR)? & 0x30) / 16;
+            (I2CUtil::read_byte::<I2CX>(i2c, dev_id.addr(), BME680_ADDR_RES_HEAT_RANGE_ADDR)?
+                & 0x30) / 16;
 
         calib.res_heat_val =
-            I2CUtil::read_byte::<I2CX>(i2c, dev_id, BME680_ADDR_RES_HEAT_VAL_ADDR)? as i8;
+            I2CUtil::read_byte::<I2CX>(i2c, dev_id.addr(), BME680_ADDR_RES_HEAT_VAL_ADDR)? as i8;
 
         calib.range_sw_err =
-            (I2CUtil::read_byte::<I2CX>(i2c, dev_id, BME680_ADDR_RANGE_SW_ERR_ADDR)?
+            (I2CUtil::read_byte::<I2CX>(i2c, dev_id.addr(), BME680_ADDR_RANGE_SW_ERR_ADDR)?
                 & BME680_RSERROR_MSK) / 16;
 
         Ok(calib)
@@ -825,13 +867,17 @@ where
     fn get_gas_config(&mut self) -> Result<GasSett, <I2C as Read>::Error, <I2C as Write>::Error> {
         let mut gas_sett: GasSett = Default::default();
 
-        gas_sett.heatr_temp =
-            Some(
-                I2CUtil::read_byte(&mut self.i2c, self.dev_id, BME680_ADDR_SENS_CONF_START)? as u16,
-            );
+        gas_sett.heatr_temp = Some(I2CUtil::read_byte(
+            &mut self.i2c,
+            self.dev_id.addr(),
+            BME680_ADDR_SENS_CONF_START,
+        )? as u16);
 
-        let heatr_dur_ms =
-            I2CUtil::read_byte(&mut self.i2c, self.dev_id, BME680_ADDR_GAS_CONF_START)? as u64;
+        let heatr_dur_ms = I2CUtil::read_byte(
+            &mut self.i2c,
+            self.dev_id.addr(),
+            BME680_ADDR_GAS_CONF_START,
+        )? as u64;
         gas_sett.heatr_dur = Some(Duration::from_millis(heatr_dur_ms));
 
         Ok(gas_sett)
@@ -847,7 +893,12 @@ where
 
         const TRIES: u8 = 10;
         for _ in 0..TRIES {
-            I2CUtil::read_bytes(&mut self.i2c, self.dev_id, BME680_FIELD0_ADDR, &mut buff)?;
+            I2CUtil::read_bytes(
+                &mut self.i2c,
+                self.dev_id.addr(),
+                BME680_FIELD0_ADDR,
+                &mut buff,
+            )?;
 
             debug!("Field data read {:?}, len: {}", buff, buff.len());
 
