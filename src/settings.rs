@@ -45,9 +45,13 @@ impl Clone for TphSett {
 #[repr(C)]
 pub struct GasSett {
     pub nb_conv: u8,
+    /// Heater control
     pub heatr_ctrl: Option<u8>,
-    pub run_gas: Option<u8>,
+    /// Enable measurement of gas, disabled by default
+    pub run_gas_measurement: bool,
+    /// Heater temperature
     pub heatr_temp: Option<u16>,
+    /// Profile duration
     pub heatr_dur: Option<Duration>,
 }
 

@@ -29,7 +29,7 @@ fn main() -> result::Result<
     sensor_settings.tph_sett.os_temp = Some(OversamplingSetting::OS8x);
     sensor_settings.tph_sett.filter = Some(2);
 
-    sensor_settings.gas_sett.run_gas = Some(0x01);
+    sensor_settings.gas_sett.run_gas_measurement = true;
     sensor_settings.gas_sett.heatr_dur = Some(Duration::from_millis(1500));
     sensor_settings.gas_sett.heatr_temp = Some(320);
 

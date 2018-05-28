@@ -576,9 +576,8 @@ where
 
             if desired_settings.contains(DesiredSensorSettings::RUN_GAS_SEL) {
                 debug!("RUN_GAS_SEL: true");
-                let gas_sett_run_gas =
-                    boundary_check::<I2C>(gas_sett.run_gas, "GasSett.run_gas", 0, 1)?;
-                data = (data as (i32) & !0x10i32 | gas_sett_run_gas as (i32) << 4i32 & 0x10i32)
+                data = (data as (i32) & !0x10i32
+                    | gas_sett.run_gas_measurement as (i32) << 4i32 & 0x10i32)
                     as (u8);
             }
 
@@ -642,8 +641,8 @@ where
             .contains(DesiredSensorSettings::RUN_GAS_SEL | DesiredSensorSettings::NBCONV_SEL)
         {
             sensor_settings.gas_sett.nb_conv = (data_array[1usize] as (i32) & 0xfi32) as (u8);
-            sensor_settings.gas_sett.run_gas =
-                Some(((data_array[1usize] as (i32) & 0x10i32) >> 4i32) as (u8));
+            sensor_settings.gas_sett.run_gas_measurement =
+                ((data_array[1usize] as (i32) & 0x10i32) >> 4i32) == 0;
         }
 
         Ok(sensor_settings)
@@ -758,7 +757,7 @@ where
         tph_dur = tph_dur.wrapping_div(1000u32);
         tph_dur = tph_dur.wrapping_add(1u32);
         let mut duration = Duration::from_millis(tph_dur as u64);
-        if sensor_settings.gas_sett.run_gas.unwrap_or(0) != 0 {
+        if sensor_settings.gas_sett.run_gas_measurement {
             duration = duration + sensor_settings.gas_sett.heatr_dur.expect("Heatrdur");
         }
         Ok(duration)
