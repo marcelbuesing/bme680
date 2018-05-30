@@ -1,5 +1,6 @@
 use core::time::Duration;
 
+/// Over-sampling settings
 #[derive(Copy, Clone, Debug)]
 #[repr(u8)]
 pub enum OversamplingSetting {
@@ -26,6 +27,7 @@ impl OversamplingSetting {
     }
 }
 
+/// IIR filter settings
 #[derive(Copy, Clone, Debug)]
 #[repr(u8)]
 pub enum IIRFilterSize {
@@ -56,12 +58,17 @@ impl IIRFilterSize {
     }
 }
 
+/// Temperature settings
 #[derive(Debug, Default, Copy)]
 #[repr(C)]
 pub struct TphSett {
+    /// Humidity oversampling
     pub os_hum: Option<OversamplingSetting>,
+    /// Temperature oversampling
     pub os_temp: Option<OversamplingSetting>,
+    /// Pressure oversampling
     pub os_pres: Option<OversamplingSetting>,
+    /// Filter coefficient
     pub filter: Option<IIRFilterSize>,
 }
 
@@ -71,6 +78,7 @@ impl Clone for TphSett {
     }
 }
 
+/// Gas measurement settings
 #[derive(Debug, Default, Copy)]
 #[repr(C)]
 pub struct GasSett {
@@ -92,6 +100,7 @@ impl Clone for GasSett {
     }
 }
 
+/// Stores gas and temperature settings
 #[derive(Debug, Default, Copy)]
 pub struct SensorSettings {
     /// Gas settings
@@ -130,6 +139,20 @@ bitflags! {
     }
 }
 
+///
+/// Builder to construct the desired settings
+///
+/// # Example
+/// ```
+/// let settings = SettingsBuilder::new()
+///     .with_humidity_oversampling(OversamplingSetting::OS2x)
+///     .with_pressure_oversampling(OversamplingSetting::OS4x)
+///     .with_temperature_oversampling(OversamplingSetting::OS8x)
+///     .with_temperature_filter(IIRFilterSize::Size3)
+///     .with_gas_measurement(Duration::from_millis(1500), 320, 25)
+///     .with_run_gas(true)
+///     .build();
+/// ```
 pub struct SettingsBuilder {
     desired_settings: DesiredSensorSettings,
     sensor_settings: SensorSettings,

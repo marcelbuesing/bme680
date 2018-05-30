@@ -452,7 +452,7 @@ where
         }
     }
 
-    pub fn bme680_set_regs(
+    fn bme680_set_regs(
         &mut self,
         reg: &[(u8, u8)],
     ) -> Result<(), <I2C as Read>::Error, <I2C as Write>::Error> {
@@ -474,6 +474,7 @@ where
         Ok(())
     }
 
+    /// Set the settings to be used during the sensor measurements
     pub fn set_sensor_settings(
         &mut self,
         settings: Settings,
@@ -494,7 +495,7 @@ where
         self.set_sensor_mode(power_mode)?;
 
         let mut element_index = 0;
-        /* Selecting the filter */
+        // Selecting the filter
         if desired_settings.contains(DesiredSensorSettings::FILTER_SEL) {
             let mut data =
                 I2CUtil::read_byte(&mut self.i2c, self.dev_id.addr(), BME680_CONF_ODR_FILT_ADDR)?;
@@ -521,7 +522,7 @@ where
             element_index += 1;
         }
 
-        /* Selecting heater T,P oversampling for the sensor */
+        // Selecting heater T,P oversampling for the sensor
         if desired_settings
             .contains(DesiredSensorSettings::OST_SEL | DesiredSensorSettings::OSP_SEL)
         {
@@ -550,7 +551,7 @@ where
             element_index += 1;
         }
 
-        /* Selecting humidity oversampling for the sensor */
+        // Selecting humidity oversampling for the sensor
         if desired_settings.contains(DesiredSensorSettings::OSH_SEL) {
             debug!("OSH_SEL: true");
             let tph_sett_os_hum =
@@ -562,7 +563,7 @@ where
             element_index += 1;
         }
 
-        /* Selecting the runGas and NB conversion settings for the sensor */
+        // Selecting the runGas and NB conversion settings for the sensor
         if desired_settings
             .contains(DesiredSensorSettings::RUN_GAS_SEL | DesiredSensorSettings::NBCONV_SEL)
         {
@@ -592,11 +593,16 @@ where
 
         self.bme680_set_regs(&reg[0..element_index])?;
 
-        /* Restore previous intended power mode */
+        // Restore previous intended power mode
         self.power_mode = intended_power_mode;
         Ok(())
     }
 
+    /// Retrieve settings from sensor registers
+    ///
+    /// # Arguments
+    ///
+    /// * `desired_settings` - Settings to be retrieved. Setting values may stay `None` if not retrieved.
     pub fn get_sensor_settings(
         &mut self,
         desired_settings: DesiredSensorSettings,
@@ -647,6 +653,11 @@ where
         Ok(sensor_settings)
     }
 
+    /// Set the sensor into a certain power mode
+    ///
+    /// # Arguments
+    ///
+    /// * `target_power_mode` - Desired target power mode
     pub fn set_sensor_mode(
         &mut self,
         target_power_mode: PowerMode,
@@ -654,18 +665,18 @@ where
         let mut tmp_pow_mode: u8;
         let mut current_power_mode: PowerMode;
 
-        /* Call repeatedly until in sleep */
+        // Call repeatedly until in sleep
         loop {
             tmp_pow_mode =
                 I2CUtil::read_byte(&mut self.i2c, self.dev_id.addr(), BME680_CONF_T_P_MODE_ADDR)?;
 
-            /* Put to sleep before changing mode */
+            // Put to sleep before changing mode
             current_power_mode = PowerMode::from(tmp_pow_mode & BME680_MODE_MSK);
 
             debug!("Current power mode: {:?}", current_power_mode);
 
             if current_power_mode != PowerMode::SleepMode {
-                /* Set to sleep*/
+                // Set to sleep
                 tmp_pow_mode = tmp_pow_mode & !BME680_MODE_MSK;
                 debug!("Setting to sleep tmp_pow_mode: {}", tmp_pow_mode);
                 self.bme680_set_regs(&[(BME680_CONF_T_P_MODE_ADDR, tmp_pow_mode)])?;
@@ -676,7 +687,7 @@ where
             }
         }
 
-        /* Already in sleep */
+        // Already in sleep
         if target_power_mode != PowerMode::SleepMode {
             tmp_pow_mode = tmp_pow_mode & !BME680_MODE_MSK | target_power_mode.value();
             debug!("Already in sleep Target power mode: {}", tmp_pow_mode);
@@ -685,6 +696,7 @@ where
         Ok(())
     }
 
+    /// Retrieve current sensor power mode via registers
     pub fn get_sensor_mode(
         &mut self,
     ) -> Result<PowerMode, <I2C as Read>::Error, <I2C as Write>::Error> {
@@ -885,6 +897,7 @@ where
         Ok(gas_sett)
     }
 
+    /// Retrieve the current sensor informations
     pub fn get_sensor_data(
         &mut self,
     ) -> Result<(FieldData, FieldDataCondition), <I2C as Read>::Error, <I2C as Write>::Error> {
