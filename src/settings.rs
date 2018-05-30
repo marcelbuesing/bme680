@@ -26,13 +26,43 @@ impl OversamplingSetting {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+#[repr(u8)]
+pub enum IIRFilterSize {
+    Size0 = 0,
+    Size1 = 1,
+    Size3 = 2,
+    Size7 = 3,
+    Size15 = 4,
+    Size31 = 5,
+    Size63 = 6,
+    Size127 = 7,
+}
+
+impl IIRFilterSize {
+    // TODO replace with TryFrom once stabilized
+    pub fn from_u8(os: u8) -> IIRFilterSize {
+        match os {
+            0 => IIRFilterSize::Size0,
+            1 => IIRFilterSize::Size1,
+            2 => IIRFilterSize::Size3,
+            3 => IIRFilterSize::Size7,
+            4 => IIRFilterSize::Size15,
+            5 => IIRFilterSize::Size31,
+            6 => IIRFilterSize::Size63,
+            7 => IIRFilterSize::Size127,
+            _ => panic!("Unknown IIRFilterSize: {}", os),
+        }
+    }
+}
+
 #[derive(Debug, Default, Copy)]
 #[repr(C)]
 pub struct TphSett {
     pub os_hum: Option<OversamplingSetting>,
     pub os_temp: Option<OversamplingSetting>,
     pub os_pres: Option<OversamplingSetting>,
-    pub filter: Option<u8>,
+    pub filter: Option<IIRFilterSize>,
 }
 
 impl Clone for TphSett {
@@ -114,7 +144,7 @@ impl SettingsBuilder {
             sensor_settings: Default::default(),
         }
     }
-    pub fn with_temperature_filter(mut self, filter: u8) -> SettingsBuilder {
+    pub fn with_temperature_filter(mut self, filter: IIRFilterSize) -> SettingsBuilder {
         self.sensor_settings.tph_sett.filter = Some(filter);
         self.desired_settings |= DesiredSensorSettings::FILTER_SEL;
         self

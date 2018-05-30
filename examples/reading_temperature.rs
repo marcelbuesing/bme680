@@ -26,13 +26,13 @@ fn main() -> result::Result<
         .with_humidity_oversampling(OversamplingSetting::OS2x)
         .with_pressure_oversampling(OversamplingSetting::OS4x)
         .with_temperature_oversampling(OversamplingSetting::OS8x)
-        .with_temperature_filter(2)
+        .with_temperature_filter(IIRFilterSize::Size3)
         .with_gas_measurement(Duration::from_millis(1500), 320, 25)
         .with_run_gas(true)
         .build();
 
     let profile_dur = dev.get_profile_dur(&settings.0)?;
-    info!("Duration {:?}", profile_dur);
+    info!("Profile duration {:?}", profile_dur);
     info!("Setting sensor settings");
     dev.set_sensor_settings(settings)?;
     info!("Setting forced power modes");

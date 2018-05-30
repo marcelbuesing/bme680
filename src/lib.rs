@@ -12,8 +12,8 @@ extern crate embedded_hal as hal;
 #[macro_use]
 extern crate log;
 
-pub use self::settings::{DesiredSensorSettings, GasSett, OversamplingSetting, SensorSettings,
-                         Settings, SettingsBuilder, TphSett};
+pub use self::settings::{DesiredSensorSettings, GasSett, IIRFilterSize, OversamplingSetting,
+                         SensorSettings, Settings, SettingsBuilder, TphSett};
 
 mod calc;
 mod settings;
@@ -496,12 +496,13 @@ where
         let mut element_index = 0;
         /* Selecting the filter */
         if desired_settings.contains(DesiredSensorSettings::FILTER_SEL) {
-            let tph_sett_filter = boundary_check::<I2C>(tph_sett.filter, "TphSett.filter", 0, 7)?;
             let mut data =
                 I2CUtil::read_byte(&mut self.i2c, self.dev_id.addr(), BME680_CONF_ODR_FILT_ADDR)?;
 
             debug!("FILTER_SEL: true");
-            data = (data as (i32) & !0x1ci32 | tph_sett_filter as (i32) << 2i32 & 0x1ci32) as (u8);
+            data = (data as (i32) & !0x1ci32
+                | tph_sett.filter.unwrap_or(IIRFilterSize::Size0) as (i32) << 2i32 & 0x1ci32)
+                as (u8);
             reg[element_index] = (BME680_CONF_ODR_FILT_ADDR, data);
             element_index += 1;
         }
@@ -611,8 +612,9 @@ where
         }
 
         if desired_settings.contains(DesiredSensorSettings::FILTER_SEL) {
-            sensor_settings.tph_sett.filter =
-                Some(((data_array[5usize] as (i32) & 0x1ci32) >> 2i32) as (u8));
+            sensor_settings.tph_sett.filter = Some(IIRFilterSize::from_u8(
+                ((data_array[5usize] as (i32) & 0x1ci32) >> 2i32) as (u8),
+            ));
         }
 
         if desired_settings
