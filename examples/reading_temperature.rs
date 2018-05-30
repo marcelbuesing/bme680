@@ -20,31 +20,25 @@ fn main() -> result::Result<
 
     let i2c = I2cdev::new("/dev/i2c-1").unwrap();
 
-    let mut dev = Bme680_dev::init(i2c, Delay {}, I2CAddress::Primary, 25)?;
+    let mut dev = Bme680_dev::init(i2c, Delay {}, I2CAddress::Primary)?;
 
-    let mut sensor_settings: SensorSettings = Default::default();
+    let settings = SettingsBuilder::new()
+        .with_humidity_oversampling(OversamplingSetting::OS2x)
+        .with_pressure_oversampling(OversamplingSetting::OS4x)
+        .with_temperature_oversampling(OversamplingSetting::OS8x)
+        .with_temperature_filter(2)
+        .with_gas_measurement(Duration::from_millis(1500), 320, 25)
+        .with_run_gas(true)
+        .build();
 
-    sensor_settings.tph_sett.os_hum = Some(OversamplingSetting::OS2x);
-    sensor_settings.tph_sett.os_pres = Some(OversamplingSetting::OS4x);
-    sensor_settings.tph_sett.os_temp = Some(OversamplingSetting::OS8x);
-    sensor_settings.tph_sett.filter = Some(2);
-
-    sensor_settings.gas_sett.run_gas_measurement = true;
-    sensor_settings.gas_sett.heatr_dur = Some(Duration::from_millis(1500));
-    sensor_settings.gas_sett.heatr_temp = Some(320);
-
-    let settings_sel = DesiredSensorSettings::OST_SEL | DesiredSensorSettings::OSP_SEL
-        | DesiredSensorSettings::OSH_SEL
-        | DesiredSensorSettings::GAS_SENSOR_SEL;
-
-    let profile_dur = dev.get_profile_dur(&sensor_settings)?;
+    let profile_dur = dev.get_profile_dur(&settings.0)?;
     info!("Duration {:?}", profile_dur);
     info!("Setting sensor settings");
-    dev.set_sensor_settings(settings_sel, &sensor_settings)?;
+    dev.set_sensor_settings(settings)?;
     info!("Setting forced power modes");
     dev.set_sensor_mode(PowerMode::ForcedMode)?;
 
-    let sensor_settings = dev.get_sensor_settings(settings_sel);
+    let sensor_settings = dev.get_sensor_settings(settings.1);
     info!("Sensor settings: {:?}", sensor_settings);
 
     loop {

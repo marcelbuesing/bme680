@@ -13,7 +13,7 @@ extern crate embedded_hal as hal;
 extern crate log;
 
 pub use self::settings::{DesiredSensorSettings, GasSett, OversamplingSetting, SensorSettings,
-                         TphSett};
+                         Settings, SettingsBuilder, TphSett};
 
 mod calc;
 mod settings;
@@ -366,7 +366,6 @@ pub struct Bme680_dev<I2C, D> {
     i2c: I2C,
     delay: D,
     dev_id: I2CAddress,
-    amb_temp: i8,
     calib: CalibData,
     // TODO remove ? as it may not reflect the state of the device
     tph_sett: TphSett,
@@ -424,7 +423,6 @@ where
         mut i2c: I2C,
         mut delay: D,
         dev_id: I2CAddress,
-        ambient_temperature: i8,
     ) -> Result<Bme680_dev<I2C, D>, <I2C as Read>::Error, <I2C as Write>::Error> {
         Bme680_dev::soft_reset(&mut i2c, &mut delay, dev_id)?;
 
@@ -442,7 +440,6 @@ where
                 delay: delay,
                 dev_id: dev_id,
                 calib: calib,
-                amb_temp: ambient_temperature,
                 power_mode: PowerMode::ForcedMode,
                 tph_sett: Default::default(),
                 gas_sett: Default::default(),
@@ -479,9 +476,9 @@ where
 
     pub fn set_sensor_settings(
         &mut self,
-        desired_settings: DesiredSensorSettings,
-        sensor_settings: &SensorSettings,
+        settings: Settings,
     ) -> Result<(), <I2C as Read>::Error, <I2C as Write>::Error> {
+        let (sensor_settings, desired_settings) = settings;
         let tph_sett = sensor_settings.tph_sett;
         let gas_sett = sensor_settings.gas_sett;
 
@@ -851,7 +848,11 @@ where
         let reg: [(u8, u8); 2] = [
             (
                 BME680_RES_HEAT0_ADDR,
-                Calc::calc_heater_res(&self.calib, self.amb_temp, gas_sett.heatr_temp.unwrap_or(0)),
+                Calc::calc_heater_res(
+                    &self.calib,
+                    gas_sett.ambient_temperature,
+                    gas_sett.heatr_temp.unwrap_or(0),
+                ),
             ),
             (
                 BME680_GAS_WAIT0_ADDR,
