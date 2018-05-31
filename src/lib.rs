@@ -319,7 +319,7 @@ impl I2CUtil {
 
 /// Driver for the BME680 environmental sensor
 #[repr(C)]
-pub struct Bme680_dev<I2C, D> {
+pub struct Bme680<I2C, D> {
     i2c: I2C,
     delay: D,
     dev_id: I2CAddress,
@@ -357,7 +357,7 @@ where
     Ok(value)
 }
 
-impl<I2C, D> Bme680_dev<I2C, D>
+impl<I2C, D> Bme680<I2C, D>
 where
     D: DelayMs<u8>,
     I2C: Read + Write,
@@ -380,8 +380,8 @@ where
         mut i2c: I2C,
         mut delay: D,
         dev_id: I2CAddress,
-    ) -> Result<Bme680_dev<I2C, D>, <I2C as Read>::Error, <I2C as Write>::Error> {
-        Bme680_dev::soft_reset(&mut i2c, &mut delay, dev_id)?;
+    ) -> Result<Bme680<I2C, D>, <I2C as Read>::Error, <I2C as Write>::Error> {
+        Bme680::soft_reset(&mut i2c, &mut delay, dev_id)?;
 
         debug!("Reading chip id");
         /* Soft reset to restore it to default values*/
@@ -390,9 +390,9 @@ where
 
         if chip_id == BME680_CHIP_ID {
             debug!("Reading calib data");
-            let calib = Bme680_dev::<I2C, D>::get_calib_data::<I2C>(&mut i2c, dev_id)?;
+            let calib = Bme680::<I2C, D>::get_calib_data::<I2C>(&mut i2c, dev_id)?;
             debug!("Calib data {:?}", calib);
-            let dev = Bme680_dev {
+            let dev = Bme680 {
                 i2c: i2c,
                 delay: delay,
                 dev_id: dev_id,

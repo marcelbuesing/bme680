@@ -19,7 +19,7 @@ fn main(
 
     let i2c = I2cdev::new("/dev/i2c-1").unwrap();
 
-    let mut dev = Bme680_dev::init(i2c, Delay {}, I2CAddress::Primary)?;
+    let mut dev = Bme680::init(i2c, Delay {}, I2CAddress::Primary)?;
 
     let settings = SettingsBuilder::new()
         .with_humidity_oversampling(OversamplingSetting::OS2x)
