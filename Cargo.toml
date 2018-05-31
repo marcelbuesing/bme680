@@ -1,6 +1,6 @@
 [package]
 name = "bme680"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["marcelbuesing <buesing.marcel@googlemail.com>"]
 description = "A pure Rust implementation for the BME680 environmental sensor."
 repository = "https://github.com/marcelbuesing/bme680-hal"
