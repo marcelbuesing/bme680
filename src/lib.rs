@@ -25,115 +25,68 @@ use core::time::Duration;
 use hal::blocking::delay::DelayMs;
 use hal::blocking::i2c::{Read, Write};
 
-/** BME680 General config */
+/// BME680 General config
 pub const BME680_POLL_PERIOD_MS: u8 = 10;
 
-/** BME680 unique chip identifier */
+/// BME680 unique chip identifier
 pub const BME680_CHIP_ID: u8 = 0x61;
 
-/** BME680 coefficients related defines */
-pub const BME680_COEFF_SIZE: usize = 41;
-pub const BME680_COEFF_ADDR1_LEN: usize = 25;
-pub const BME680_COEFF_ADDR2_LEN: usize = 16;
+/// BME680 field_x related defines
+const BME680_FIELD_LENGTH: usize = 15;
 
-/** BME680 field_x related defines */
-pub const BME680_FIELD_LENGTH: usize = 15;
-pub const BME680_FIELD_ADDR_OFFSET: u8 = 17;
+/// BME680 coefficients related defines
+const BME680_COEFF_ADDR1_LEN: usize = 25;
+const BME680_COEFF_ADDR2_LEN: usize = 16;
 
-pub const BME680_SOFT_RESET_CMD: u8 = 0xb6;
+const BME680_SOFT_RESET_CMD: u8 = 0xb6;
 
-pub const BME680_OK: i8 = 0;
+/// Register map
+/// Other coefficient's address
+const BME680_ADDR_RES_HEAT_VAL_ADDR: u8 = 0x00;
+const BME680_ADDR_RES_HEAT_RANGE_ADDR: u8 = 0x02;
+const BME680_ADDR_RANGE_SW_ERR_ADDR: u8 = 0x04;
+const BME680_ADDR_SENS_CONF_START: u8 = 0x5A;
+const BME680_ADDR_GAS_CONF_START: u8 = 0x64;
 
-/** Errors **/
-pub const BME680_E_NULL_PTR: i8 = -1;
-pub const BME680_E_COM_FAIL: i8 = -2;
-pub const BME680_E_DEV_NOT_FOUND: i8 = -3;
-pub const BME680_E_INVALID_LENGTH: i8 = -4;
+const BME680_SOFT_RESET_ADDR: u8 = 0xe0;
 
-/** Register map */
-/** Other coefficient's address */
-pub const BME680_ADDR_RES_HEAT_VAL_ADDR: u8 = 0x00;
-pub const BME680_ADDR_RES_HEAT_RANGE_ADDR: u8 = 0x02;
-pub const BME680_ADDR_RANGE_SW_ERR_ADDR: u8 = 0x04;
-pub const BME680_ADDR_SENS_CONF_START: u8 = 0x5A;
-pub const BME680_ADDR_GAS_CONF_START: u8 = 0x64;
+/// Field settings
+const BME680_FIELD0_ADDR: u8 = 0x1d;
 
-pub const BME680_SOFT_RESET_ADDR: u8 = 0xe0;
+/// Heater settings
+const BME680_RES_HEAT0_ADDR: u8 = 0x5a;
+const BME680_GAS_WAIT0_ADDR: u8 = 0x64;
 
-/** Field settings */
-pub const BME680_FIELD0_ADDR: u8 = 0x1d;
+/// Sensor configuration registers
+const BME680_CONF_HEAT_CTRL_ADDR: u8 = 0x70;
+const BME680_CONF_ODR_RUN_GAS_NBC_ADDR: u8 = 0x71;
+const BME680_CONF_OS_H_ADDR: u8 = 0x72;
+const BME680_CONF_T_P_MODE_ADDR: u8 = 0x74;
+const BME680_CONF_ODR_FILT_ADDR: u8 = 0x75;
 
-/** Heater settings */
-pub const BME680_RES_HEAT0_ADDR: u8 = 0x5a;
-pub const BME680_GAS_WAIT0_ADDR: u8 = 0x64;
+/// Coefficient's address
+const BME680_COEFF_ADDR1: u8 = 0x89;
+const BME680_COEFF_ADDR2: u8 = 0xe1;
 
-/** Sensor configuration registers */
-pub const BME680_CONF_HEAT_CTRL_ADDR: u8 = 0x70;
-pub const BME680_CONF_ODR_RUN_GAS_NBC_ADDR: u8 = 0x71;
-pub const BME680_CONF_OS_H_ADDR: u8 = 0x72;
-pub const BME680_MEM_PAGE_ADDR: u8 = 0xf3;
-pub const BME680_CONF_T_P_MODE_ADDR: u8 = 0x74;
-pub const BME680_CONF_ODR_FILT_ADDR: u8 = 0x75;
+/// Chip identifier
+const BME680_CHIP_ID_ADDR: u8 = 0xd0;
 
-/** Coefficient's address */
-pub const BME680_COEFF_ADDR1: u8 = 0x89;
-pub const BME680_COEFF_ADDR2: u8 = 0xe1;
+const BME680_SLEEP_MODE: u8 = 0;
+const BME680_FORCED_MODE: u8 = 1;
 
-/** Chip identifier */
-pub const BME680_CHIP_ID_ADDR: u8 = 0xd0;
+const BME680_RESET_PERIOD: u8 = 10;
 
-pub const BME680_SLEEP_MODE: u8 = 0;
-pub const BME680_FORCED_MODE: u8 = 1;
+const BME680_MODE_MSK: u8 = 0x03;
+const BME680_RSERROR_MSK: u8 = 0xf0;
+const BME680_NEW_DATA_MSK: u8 = 0x80;
+const BME680_GAS_INDEX_MSK: u8 = 0x0f;
+const BME680_GAS_RANGE_MSK: u8 = 0x0f;
+const BME680_GASM_VALID_MSK: u8 = 0x20;
+const BME680_HEAT_STAB_MSK: u8 = 0x10;
 
-pub const BME680_RESET_PERIOD: u8 = 10;
-
-pub const BME680_GAS_MEAS_MSK: u8 = 0x30;
-pub const BME680_NBCONV_MSK: u8 = 0x0F;
-pub const BME680_FILTER_MSK: u8 = 0x1C;
-pub const BME680_OST_MSK: u8 = 0xE0;
-pub const BME680_OSP_MSK: u8 = 0x1C;
-pub const BME680_OSH_MSK: u8 = 0x07;
-pub const BME680_HCTRL_MSK: u8 = 0x08;
-pub const BME680_RUN_GAS_MSK: u8 = 0x10;
-pub const BME680_MODE_MSK: u8 = 0x03;
-pub const BME680_RHRANGE_MSK: u8 = 0x30;
-pub const BME680_RSERROR_MSK: u8 = 0xf0;
-pub const BME680_NEW_DATA_MSK: u8 = 0x80;
-pub const BME680_GAS_INDEX_MSK: u8 = 0x0f;
-pub const BME680_GAS_RANGE_MSK: u8 = 0x0f;
-pub const BME680_GASM_VALID_MSK: u8 = 0x20;
-pub const BME680_HEAT_STAB_MSK: u8 = 0x10;
-pub const BME680_MEM_PAGE_MSK: u8 = 0x10;
-pub const BME680_SPI_RD_MSK: u8 = 0x80;
-pub const BME680_SPI_WR_MSK: u8 = 0x7f;
-pub const BME680_BIT_H1_DATA_MSK: u8 = 0x0F;
-
-///
-/// SPI memory page settings
-///
-pub const BME680_MEM_PAGE0: u8 = 0x10;
-
-///
-/// SPI memory page settings
-///
-pub const BME680_MEM_PAGE1: u8 = 0x00;
-
-/** Buffer length macro declaration */
-pub const BME680_TMP_BUFFER_LENGTH: usize = 40;
-pub const BME680_REG_BUFFER_LENGTH: usize = 6;
-pub const BME680_FIELD_DATA_LENGTH: usize = 3;
-pub const BME680_GAS_REG_BUF_LENGTH: usize = 20;
-
-/* Settings selector */
-pub const BME680_OST_SEL: u16 = 1;
-pub const BME680_OSP_SEL: u16 = 2;
-pub const BME680_OSH_SEL: u16 = 4;
-pub const BME680_GAS_MEAS_SEL: u16 = 8;
-pub const BME680_FILTER_SEL: u16 = 16;
-pub const BME680_HCNTRL_SEL: u16 = 32;
-pub const BME680_RUN_GAS_SEL: u16 = 64;
-pub const BME680_NBCONV_SEL: u16 = 128;
-pub const BME680_GAS_SENSOR_SEL: u16 = BME680_GAS_MEAS_SEL | BME680_RUN_GAS_SEL | BME680_NBCONV_SEL;
+/// Buffer length macro declaration
+const BME680_TMP_BUFFER_LENGTH: usize = 40;
+const BME680_REG_BUFFER_LENGTH: usize = 6;
 
 #[derive(Debug)]
 pub enum Bme680Error<R, W> {
