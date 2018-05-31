@@ -88,8 +88,9 @@ const BME680_HEAT_STAB_MSK: u8 = 0x10;
 const BME680_TMP_BUFFER_LENGTH: usize = 40;
 const BME680_REG_BUFFER_LENGTH: usize = 6;
 
+/// All possible errors in this crate
 #[derive(Debug)]
-pub enum Bme680Error<R, W> {
+pub enum Error<R, W> {
     ///
     /// aka BME680_E_COM_FAIL
     ///
@@ -117,7 +118,7 @@ pub enum Bme680Error<R, W> {
     BoundaryCheckFailure(&'static str),
 }
 
-pub type Result<T, R, W> = result::Result<T, Bme680Error<R, W>>;
+pub type Result<T, R, W> = result::Result<T, Error<R, W>>;
 
 ///
 /// Power mode settings
@@ -287,11 +288,11 @@ impl I2CUtil {
         let mut buf = [0; 1];
 
         i2c.write(dev_id, &mut [reg_addr])
-            .map_err(|e| Bme680Error::I2CWrite(e))?;
+            .map_err(|e| Error::I2CWrite(e))?;
 
         match i2c.read(dev_id, &mut buf) {
             Ok(()) => Ok(buf[0]),
-            Err(e) => Err(Bme680Error::I2CRead(e)),
+            Err(e) => Err(Error::I2CRead(e)),
         }
     }
 
@@ -305,11 +306,11 @@ impl I2CUtil {
         I2C: Read + Write,
     {
         i2c.write(dev_id, &mut [reg_addr])
-            .map_err(|e| Bme680Error::I2CWrite(e))?;
+            .map_err(|e| Error::I2CWrite(e))?;
 
         match i2c.read(dev_id, buf) {
             Ok(()) => Ok(()),
-            Err(e) => Err(Bme680Error::I2CRead(e)),
+            Err(e) => Err(Error::I2CRead(e)),
         }
     }
 }
@@ -337,18 +338,18 @@ fn boundary_check<I2C>(
 where
     I2C: Read + Write,
 {
-    let value = value.ok_or(Bme680Error::BoundaryCheckFailure(value_name))?;
+    let value = value.ok_or(Error::BoundaryCheckFailure(value_name))?;
 
     if value < min {
         const MIN: &str = "Boundary check failure, value exceeds maximum";
         error!("{}, value name: {}", MIN, value_name);
-        return Err(Bme680Error::BoundaryCheckFailure(MIN));
+        return Err(Error::BoundaryCheckFailure(MIN));
     }
 
     if value > max {
         const MAX: &str = "Boundary check, value exceeds minimum";
         error!("{}, value name: {}", MAX, value_name);
-        return Err(Bme680Error::BoundaryCheckFailure(MAX));
+        return Err(Error::BoundaryCheckFailure(MAX));
     }
     Ok(value)
 }
@@ -366,7 +367,7 @@ where
         let tmp_buff: [u8; 2] = [BME680_SOFT_RESET_ADDR, BME680_SOFT_RESET_CMD];
 
         i2c.write(dev_id.addr(), &tmp_buff)
-            .map_err(|e| Bme680Error::I2CWrite(e))?;
+            .map_err(|e| Error::I2CWrite(e))?;
 
         delay.delay_ms(BME680_RESET_PERIOD);
         Ok(())
@@ -401,7 +402,7 @@ where
             Ok(dev)
         } else {
             error!("Device does not match chip id {}", BME680_CHIP_ID);
-            Err(Bme680Error::DeviceNotFound)
+            Err(Error::DeviceNotFound)
         }
     }
 
@@ -410,7 +411,7 @@ where
         reg: &[(u8, u8)],
     ) -> Result<(), <I2C as Read>::Error, <I2C as Write>::Error> {
         if reg.is_empty() || reg.len() > (BME680_TMP_BUFFER_LENGTH / 2) as usize {
-            return Err(Bme680Error::InvalidLength);
+            return Err(Error::InvalidLength);
         }
 
         for (reg_addr, reg_data) in reg {
@@ -421,7 +422,7 @@ where
             );
             self.i2c
                 .write(self.dev_id.addr(), &tmp_buff)
-                .map_err(|e| Bme680Error::I2CWrite(e))?;
+                .map_err(|e| Error::I2CWrite(e))?;
         }
 
         Ok(())
@@ -808,7 +809,7 @@ where
         gas_sett: GasSett,
     ) -> Result<(), <I2C as Read>::Error, <I2C as Write>::Error> {
         if self.power_mode != PowerMode::ForcedMode {
-            return Err(Bme680Error::DefinePwrMode);
+            return Err(Error::DefinePwrMode);
         }
 
         // TODO check whether unwrap_or changes behaviour

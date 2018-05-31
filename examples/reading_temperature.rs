@@ -12,10 +12,9 @@ use std::result;
 use std::thread;
 use std::time::Duration;
 
-fn main() -> result::Result<
-    (),
-    Bme680Error<<hal::I2cdev as i2c::Read>::Error, <hal::I2cdev as i2c::Write>::Error>,
-> {
+fn main(
+) -> result::Result<(), Error<<hal::I2cdev as i2c::Read>::Error, <hal::I2cdev as i2c::Write>::Error>>
+{
     env_logger::init();
 
     let i2c = I2cdev::new("/dev/i2c-1").unwrap();
