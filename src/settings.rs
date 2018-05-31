@@ -116,6 +116,8 @@ impl Clone for SensorSettings {
 }
 
 bitflags! {
+    /// Flags that determine what settings are to be set and what settings are to be read.
+    /// Use the `SettingsBuilder` to initialize an instance when setting the settings.
     #[derive(Default)]
     pub struct DesiredSensorSettings: u16 {
         /// To set temperature oversampling
@@ -158,6 +160,7 @@ pub struct SettingsBuilder {
     sensor_settings: SensorSettings,
 }
 
+/// Tuple of desired sensor settings flags and sensor settings
 pub type Settings = (SensorSettings, DesiredSensorSettings);
 
 impl SettingsBuilder {

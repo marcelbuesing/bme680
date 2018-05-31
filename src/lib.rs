@@ -118,6 +118,7 @@ pub enum Error<R, W> {
     BoundaryCheckFailure(&'static str),
 }
 
+/// Abbreviates `std::result::Result` type
 pub type Result<T, R, W> = result::Result<T, Error<R, W>>;
 
 ///
@@ -181,6 +182,7 @@ impl Default for I2CAddress {
     }
 }
 
+/// Calibration data used during initalization
 #[derive(Debug, Default, Copy)]
 #[repr(C)]
 pub struct CalibData {
@@ -218,6 +220,7 @@ impl Clone for CalibData {
     }
 }
 
+/// Contains read sensors values  e.g. temperature, pressure, humidity etc.
 #[derive(Debug, Default, Copy)]
 #[repr(C)]
 pub struct FieldData {
@@ -260,8 +263,7 @@ impl FieldData {
     }
 }
 
-/// aka new_fields - BME680_NEW_DATA_MSK
-///
+/// Shows if new data is available
 #[derive(Debug)]
 pub enum FieldDataCondition {
     ///
@@ -274,7 +276,7 @@ pub enum FieldDataCondition {
     Unchanged,
 }
 
-pub struct I2CUtil {}
+struct I2CUtil {}
 
 impl I2CUtil {
     pub fn read_byte<I2C>(
@@ -315,6 +317,7 @@ impl I2CUtil {
     }
 }
 
+/// Driver for the BME680 environmental sensor
 #[repr(C)]
 pub struct Bme680_dev<I2C, D> {
     i2c: I2C,
