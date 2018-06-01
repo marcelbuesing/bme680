@@ -301,7 +301,7 @@ impl FieldData {
 }
 
 /// Shows if new data is available
-#[derive(Debug)]
+#[derive(PartialEq, Debug)]
 pub enum FieldDataCondition {
     ///
     /// Data changed since last read
