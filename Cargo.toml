@@ -15,4 +15,5 @@ log = "0.4"
 [dev-dependencies]
 env_logger = "0.5"
 i2cdev = "0.3"
+influent = "0.4"
 linux-embedded-hal = "0.2"
