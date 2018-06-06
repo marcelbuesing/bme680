@@ -212,22 +212,19 @@ impl SettingsBuilder {
         self.sensor_settings.gas_sett.heatr_dur = Some(heatr_dur);
         self.sensor_settings.gas_sett.heatr_temp = Some(heatr_temp);
         self.sensor_settings.gas_sett.ambient_temperature = ambient_temperature;
-        self.desired_settings |= DesiredSensorSettings::RUN_GAS_SEL;
-        self.desired_settings |= DesiredSensorSettings::GAS_MEAS_SEL;
+        self.desired_settings |= DesiredSensorSettings::GAS_SENSOR_SEL;
         self
     }
 
     pub fn with_nb_conv(mut self, nb_conv: u8) -> SettingsBuilder {
         self.sensor_settings.gas_sett.nb_conv = nb_conv;
-        self.desired_settings |= DesiredSensorSettings::NBCONV_SEL;
-        self.desired_settings |= DesiredSensorSettings::GAS_MEAS_SEL;
+        self.desired_settings |= DesiredSensorSettings::GAS_SENSOR_SEL;
         self
     }
 
     pub fn with_run_gas(mut self, run_gas: bool) -> SettingsBuilder {
         self.sensor_settings.gas_sett.run_gas_measurement = run_gas;
-        self.desired_settings |= DesiredSensorSettings::RUN_GAS_SEL;
-        self.desired_settings |= DesiredSensorSettings::GAS_MEAS_SEL;
+        self.desired_settings |= DesiredSensorSettings::GAS_SENSOR_SEL;
         self
     }
 
