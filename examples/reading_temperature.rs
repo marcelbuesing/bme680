@@ -1,3 +1,5 @@
+#![no_std]
+
 extern crate bme680;
 extern crate embedded_hal;
 extern crate env_logger;
@@ -7,10 +9,10 @@ extern crate log;
 
 use bme680::*;
 use embedded_hal::blocking::i2c;
+use embedded_hal::blocking::delay::DelayMs;
 use hal::*;
-use std::result;
-use std::thread;
-use std::time::Duration;
+use core::result;
+use core::time::Duration;
 
 fn main(
 ) -> result::Result<(), Error<<hal::I2cdev as i2c::Read>::Error, <hal::I2cdev as i2c::Write>::Error>>
@@ -20,6 +22,7 @@ fn main(
     let i2c = I2cdev::new("/dev/i2c-1").unwrap();
 
     let mut dev = Bme680::init(i2c, Delay {}, I2CAddress::Primary)?;
+    let mut delay = Delay {};
 
     let settings = SettingsBuilder::new()
         .with_humidity_oversampling(OversamplingSetting::OS2x)
@@ -41,7 +44,7 @@ fn main(
     info!("Sensor settings: {:?}", sensor_settings);
 
     loop {
-        thread::sleep(Duration::from_millis(5000));
+        delay.delay_ms(5000u32);
         let power_mode = dev.get_sensor_mode();
         info!("Sensor power mode: {:?}", power_mode);
         info!("Setting forced power modes");
