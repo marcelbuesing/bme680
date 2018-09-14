@@ -4,18 +4,13 @@
 //! The library uses the embedded-hal crate to abstract reading and writing via I²C.
 //! In the examples you can find a demo how to use the library in Linux using the linux-embedded-hal crate (e.g. on a RPI).
 //! ```no_run
-
-//! extern crate bme680;
-//! extern crate embedded_hal;
-//! extern crate linux_embedded_hal as hal;
-//!
 //! use bme680::*;
 //! use embedded_hal::blocking::i2c;
-//! use hal::*;
+//! use linux_embedded_hal::{Delay, I2cdev};
 //! use std::result;
 //! use std::time::Duration;
 //!
-//! fn main() -> result::Result<(), Error<<hal::I2cdev as i2c::Read>::Error, <hal::I2cdev as i2c::Write>::Error>>
+//! fn main() -> result::Result<(), Error<<I2cdev as i2c::Read>::Error, <I2cdev as i2c::Write>::Error>>
 //! {
 //!     // Initialize device
 //!     let i2c = I2cdev::new("/dev/i2c-1").unwrap();
@@ -38,16 +33,11 @@
 //!     println!("Pressure {}hPa", data.pressure_hpa());
 //!     println!("Humidity {}%", data.humidity_percent());
 //!     println!("Gas Resistence {}Ω", data.gas_resistance_ohm());
+//!     Ok(())
 //! }
 //! ```
 
 #![no_std]
-
-#[macro_use]
-extern crate bitflags;
-extern crate embedded_hal as hal;
-#[macro_use]
-extern crate log;
 
 pub use self::settings::{DesiredSensorSettings, GasSett, IIRFilterSize, OversamplingSetting,
                          SensorSettings, Settings, SettingsBuilder, TphSett};
@@ -55,12 +45,13 @@ pub use self::settings::{DesiredSensorSettings, GasSett, IIRFilterSize, Oversamp
 mod calc;
 mod settings;
 
-use calc::Calc;
+use crate::calc::Calc;
 
 use core::result;
 use core::time::Duration;
-use hal::blocking::delay::DelayMs;
-use hal::blocking::i2c::{Read, Write};
+use embedded_hal::blocking::delay::DelayMs;
+use embedded_hal::blocking::i2c::{Read, Write};
+use log::{log, debug, error, info};
 
 /// BME680 General config
 pub const BME680_POLL_PERIOD_MS: u8 = 10;

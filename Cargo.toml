@@ -1,3 +1,5 @@
+cargo-features = ["edition"]
+
 [package]
 name = "bme680"
 version = "0.3.1"
@@ -6,6 +8,7 @@ description = "A pure Rust implementation for the BME680 environmental sensor."
 repository = "https://github.com/marcelbuesing/bme680-hal"
 documentation = "https://docs.rs/bme680"
 license = "MIT"
+edition = "2018"
 
 [dependencies]
 bitflags = "1.0"

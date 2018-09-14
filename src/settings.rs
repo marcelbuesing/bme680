@@ -1,3 +1,4 @@
+use bitflags::{bitflags, __bitflags, __impl_bitflags};
 use core::time::Duration;
 
 /// Over-sampling settings
@@ -146,6 +147,9 @@ bitflags! {
 ///
 /// # Example
 /// ```
+/// use bme680::{IIRFilterSize, OversamplingSetting, SettingsBuilder};
+/// use std::time::Duration;
+///
 /// let settings = SettingsBuilder::new()
 ///     .with_humidity_oversampling(OversamplingSetting::OS2x)
 ///     .with_pressure_oversampling(OversamplingSetting::OS4x)

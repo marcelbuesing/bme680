@@ -1,5 +1,5 @@
 use core::time::Duration;
-use CalibData;
+use crate::CalibData;
 
 pub struct Calc {}
 
