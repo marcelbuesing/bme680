@@ -15,7 +15,7 @@ i2c-1    i2c       bcm2835 I2C adapter             I2C adapter
 ```
 
 Determine I2C-Address of sensor, `0x76` is the primary address, `0x77` is the secondary address.
-If in doubt use determine the address via the following command:
+If in doubt determine the address via the following command:
 
 ```
 pi@raspberrypi:~ $ i2cdetect -y 1
@@ -29,3 +29,12 @@ pi@raspberrypi:~ $ i2cdetect -y 1
 60: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 70: -- -- -- -- -- -- 76
 ```
+
+# Example Influx Client
+The examples folder contains an example for a simple influx database client inserting collected values.
+Below you may find examples of Chronograf graphs of an indoor measurement over a period of 30 days.
+
+![Temperature Graph](examples/res/influx_temperature.png "Temperature measurement in C°")
+![Humidity Graph](examples/res/influx_humidity.png "Humidity measurement in %")
+![Air pressure Graph](examples/res/influx_pressure.png "Air pressure measurement in hPa")
+![Gas resistance Graph](examples/res/influx_gas_resistance.png "Gas resistance measurement")
