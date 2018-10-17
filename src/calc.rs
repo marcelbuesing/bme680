@@ -58,7 +58,8 @@ impl Calc {
         var2 = var2 + (var1 * calib.par_p5 as (i32) << 1);
         var2 = (var2 >> 2i32) + (calib.par_p4 as (i32) << 16i32);
         var1 = (((var1 >> 2i32) * (var1 >> 2i32) >> 13i32) * (calib.par_p3 as (i32) << 5i32)
-            >> 3i32) + (calib.par_p2 as (i32) * var1 >> 1i32);
+            >> 3i32)
+            + (calib.par_p2 as (i32) * var1 >> 1i32);
         var1 = var1 >> 18i32;
         var1 = (32768i32 + var1) * calib.par_p1 as (i32) >> 15i32;
         let mut pressure_comp: i32 = 1048576u32.wrapping_sub(pres_adc) as (i32);
@@ -71,8 +72,11 @@ impl Calc {
         var1 = calib.par_p9 as (i32) * ((pressure_comp >> 3i32) * (pressure_comp >> 3i32) >> 13i32)
             >> 12i32;
         var2 = (pressure_comp >> 2i32) * calib.par_p8 as (i32) >> 13i32;
-        let var3: i32 = (pressure_comp >> 8i32) * (pressure_comp >> 8i32) * (pressure_comp >> 8i32)
-            * calib.par_p10 as (i32) >> 17i32;
+        let var3: i32 = (pressure_comp >> 8i32)
+            * (pressure_comp >> 8i32)
+            * (pressure_comp >> 8i32)
+            * calib.par_p10 as (i32)
+            >> 17i32;
         pressure_comp =
             pressure_comp + (var1 + var2 + var3 + (calib.par_p7 as (i32) << 7i32) >> 4i32);
         pressure_comp as (u32)
@@ -80,12 +84,14 @@ impl Calc {
 
     pub fn calc_humidity(calib: &CalibData, t_fine: i32, hum_adc: u16) -> u32 {
         let temp_scaled: i32 = t_fine * 5i32 + 128i32 >> 8i32;
-        let var1: i32 = hum_adc as (i32) - calib.par_h1 as (i32) * 16i32
+        let var1: i32 = hum_adc as (i32)
+            - calib.par_h1 as (i32) * 16i32
             - (temp_scaled * calib.par_h3 as (i32) / 100i32 >> 1i32);
         let var2: i32 = calib.par_h2 as (i32)
             * (temp_scaled * calib.par_h4 as (i32) / 100i32
                 + (temp_scaled * (temp_scaled * calib.par_h5 as (i32) / 100i32) >> 6i32) / 100i32
-                + (1i32 << 14i32)) >> 10i32;
+                + (1i32 << 14i32))
+            >> 10i32;
         let var3: i32 = var1 * var2;
         let var4: i32 = calib.par_h6 as (i32) << 7i32;
         let var4: i32 = var4 + temp_scaled * calib.par_h7 as (i32) / 100i32 >> 4i32;

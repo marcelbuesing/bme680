@@ -49,8 +49,10 @@ extern crate embedded_hal as hal;
 #[macro_use]
 extern crate log;
 
-pub use self::settings::{DesiredSensorSettings, GasSett, IIRFilterSize, OversamplingSetting,
-                         SensorSettings, Settings, SettingsBuilder, TphSett};
+pub use self::settings::{
+    DesiredSensorSettings, GasSett, IIRFilterSize, OversamplingSetting, SensorSettings, Settings,
+    SettingsBuilder, TphSett,
+};
 
 mod calc;
 mod settings;
@@ -736,24 +738,21 @@ where
         let os_to_meas_cycles: [u8; 6] = [0u8, 1u8, 2u8, 4u8, 8u8, 16u8];
         // TODO check if the following unwrap_ors do not change behaviour
         let mut meas_cycles = os_to_meas_cycles[sensor_settings
-                                                    .tph_sett
-                                                    .os_temp
-                                                    .unwrap_or(OversamplingSetting::OSNone)
-                                                    as (usize)]
-            as (u32);
+            .tph_sett
+            .os_temp
+            .unwrap_or(OversamplingSetting::OSNone)
+            as (usize)] as (u32);
         meas_cycles = meas_cycles.wrapping_add(
             os_to_meas_cycles[sensor_settings
-                                  .tph_sett
-                                  .os_pres
-                                  .unwrap_or(OversamplingSetting::OSNone)
-                                  as (usize)] as (u32),
+                .tph_sett
+                .os_pres
+                .unwrap_or(OversamplingSetting::OSNone) as (usize)] as (u32),
         );
         meas_cycles = meas_cycles.wrapping_add(
             os_to_meas_cycles[sensor_settings
-                                  .tph_sett
-                                  .os_hum
-                                  .unwrap_or(OversamplingSetting::OSNone)
-                                  as (usize)] as (u32),
+                .tph_sett
+                .os_hum
+                .unwrap_or(OversamplingSetting::OSNone) as (usize)] as (u32),
         );
         let mut tph_dur = meas_cycles.wrapping_mul(1963u32);
         tph_dur = tph_dur.wrapping_add(477u32.wrapping_mul(4u32));
@@ -832,14 +831,16 @@ where
 
         calib.res_heat_range =
             (I2CUtil::read_byte::<I2CX>(i2c, dev_id.addr(), BME680_ADDR_RES_HEAT_RANGE_ADDR)?
-                & 0x30) / 16;
+                & 0x30)
+                / 16;
 
         calib.res_heat_val =
             I2CUtil::read_byte::<I2CX>(i2c, dev_id.addr(), BME680_ADDR_RES_HEAT_VAL_ADDR)? as i8;
 
         calib.range_sw_err =
             (I2CUtil::read_byte::<I2CX>(i2c, dev_id.addr(), BME680_ADDR_RANGE_SW_ERR_ADDR)?
-                & BME680_RSERROR_MSK) / 16;
+                & BME680_RSERROR_MSK)
+                / 16;
 
         Ok(calib)
     }

@@ -8,11 +8,11 @@ extern crate linux_embedded_hal as hal;
 extern crate log;
 
 use bme680::*;
-use embedded_hal::blocking::i2c;
-use embedded_hal::blocking::delay::DelayMs;
-use hal::*;
 use core::result;
 use core::time::Duration;
+use embedded_hal::blocking::delay::DelayMs;
+use embedded_hal::blocking::i2c;
+use hal::*;
 
 fn main(
 ) -> result::Result<(), Error<<hal::I2cdev as i2c::Read>::Error, <hal::I2cdev as i2c::Write>::Error>>
