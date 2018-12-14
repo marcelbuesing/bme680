@@ -591,6 +591,7 @@ where
 
         // Restore previous intended power mode
         self.power_mode = intended_power_mode;
+        self.tph_sett = tph_sett;
         Ok(())
     }
 
@@ -931,7 +932,7 @@ where
             data.status = data.status | buff[14] & BME680_HEAT_STAB_MSK;
 
             if data.status & BME680_NEW_DATA_MSK != 0 {
-                let (temp, t_fine) = Calc::calc_temperature(&self.calib, adc_temp);
+                let (temp, t_fine) = Calc::calc_temperature(&self.calib, adc_temp, self.tph_sett.temperature_offset);
                 debug!(
                     "adc_temp: {} adc_pres: {} adc_hum: {} adc_gas_res: {}, t_fine: {}",
                     adc_temp, adc_pres, adc_hum, adc_gas_res, t_fine

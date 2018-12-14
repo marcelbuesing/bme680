@@ -70,6 +70,8 @@ pub struct TphSett {
     pub os_pres: Option<OversamplingSetting>,
     /// Filter coefficient
     pub filter: Option<IIRFilterSize>,
+    /// If set, the temperature t_fine will be increased by the given value in celsius.
+    pub temperature_offset: Option<i32>,
 }
 
 impl Clone for TphSett {
@@ -225,6 +227,12 @@ impl SettingsBuilder {
     pub fn with_run_gas(mut self, run_gas: bool) -> SettingsBuilder {
         self.sensor_settings.gas_sett.run_gas_measurement = run_gas;
         self.desired_settings |= DesiredSensorSettings::GAS_SENSOR_SEL;
+        self
+    }
+
+    /// Temperature offset in Celsius, e.g. 4, -8, 1.25
+    pub fn with_temperature_offset(mut self, offset: i32) -> SettingsBuilder {
+        self.sensor_settings.tph_sett.temperature_offset = Some(offset);
         self
     }
 
