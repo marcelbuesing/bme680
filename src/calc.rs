@@ -46,16 +46,17 @@ impl Calc {
     /// * `temp_adc`
     /// * `temp_offset` - If set, the temperature t_fine will be increased by given
     ///                   value in celsius. Temperature offset in Celsius, e.g. 4, -8, 1.25
-    pub fn calc_temperature(calib: &CalibData, temp_adc: u32, temp_offset: Option<i32>) -> (i16, i32) {
+    pub fn calc_temperature(calib: &CalibData, temp_adc: u32, temp_offset: Option<f32>) -> (i16, i32) {
         let var1: i64 = (temp_adc as (i64) >> 3) - ((calib.par_t1 as (i64)) << 1);
         let var2: i64 = (var1 * (calib.par_t2 as i64)) >> 11;
         let var3: i64 = ((var1 >> 1) * (var1 >> 1)) >> 12;
         let var3: i64 = (var3 * ((calib.par_t3 as i64) << 4)) >> 14;
-        // TODO really assign here ?
-        let mut temp_offset = temp_offset.unwrap_or(0);
-        if temp_offset < 0 {
-            temp_offset = -1 * ((((temp_offset.abs() * 100) << 8) - 128) / 5);
-        }
+
+        let temp_offset =  match temp_offset {
+            None => 0i32,
+            Some(offset) if offset == 0.0 => 0i32,
+            Some(offset) => offset.signum() as i32 * (((((offset.abs() * 100.0) as i32) << 8) - 128) / 5),
+        };
 
         let t_fine: i32 = (var2 + var3) as i32  + temp_offset;
         let calc_temp: i16 = (((t_fine * 5) + 128) >> 8) as i16;

@@ -38,6 +38,8 @@
 //!     println!("Pressure {}hPa", data.pressure_hpa());
 //!     println!("Humidity {}%", data.humidity_percent());
 //!     println!("Gas Resistence {}Ω", data.gas_resistance_ohm());
+//!
+//!     Ok(())
 //! }
 //! ```
 
