@@ -71,7 +71,7 @@ pub struct TphSett {
     /// Filter coefficient
     pub filter: Option<IIRFilterSize>,
     /// If set, the temperature t_fine will be increased by the given value in celsius.
-    pub temperature_offset: Option<i32>,
+    pub temperature_offset: Option<f32>,
 }
 
 impl Clone for TphSett {
@@ -148,12 +148,15 @@ bitflags! {
 ///
 /// # Example
 /// ```
+/// use bme680::{IIRFilterSize, OversamplingSetting, SettingsBuilder};
+/// use std::time::Duration;
 /// let settings = SettingsBuilder::new()
 ///     .with_humidity_oversampling(OversamplingSetting::OS2x)
 ///     .with_pressure_oversampling(OversamplingSetting::OS4x)
 ///     .with_temperature_oversampling(OversamplingSetting::OS8x)
 ///     .with_temperature_filter(IIRFilterSize::Size3)
 ///     .with_gas_measurement(Duration::from_millis(1500), 320, 25)
+///     .with_temperature_offset(-4.25)
 ///     .with_run_gas(true)
 ///     .build();
 /// ```
@@ -231,7 +234,7 @@ impl SettingsBuilder {
     }
 
     /// Temperature offset in Celsius, e.g. 4, -8, 1.25
-    pub fn with_temperature_offset(mut self, offset: i32) -> SettingsBuilder {
+    pub fn with_temperature_offset(mut self, offset: f32) -> SettingsBuilder {
         self.sensor_settings.tph_sett.temperature_offset = Some(offset);
         self
     }
