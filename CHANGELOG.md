@@ -1,6 +1,10 @@
 # Change Log
+## [0.4.2](https://github.com/marcelbuesing/bme680/tree/0.4.2) (2018-01-05)
+[Full Changelog](https://github.com/marcelbuesing/bme680/compare/0.4.1..0.4.2)
+- `get_sensor_settings` now properly returns the configured temperature offset, closes #12.
+  Thank you @nickbroon for reporting this and @caemor for the feedback.
 
-## [0.4.0](https://github.com/marcelbuesing/bme680/tree/0.4.1) (2018-12-22)
+## [0.4.1](https://github.com/marcelbuesing/bme680/tree/0.4.1) (2018-12-22)
 [Full Changelog](https://github.com/marcelbuesing/bme680/compare/0.4.0..0.4.1)
 - `with_temperature_offset` now uses `f32` instead of`i32`. Fixed calulation for non negative offsets.
 
