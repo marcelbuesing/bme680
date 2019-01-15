@@ -6,6 +6,7 @@ rust:
 script:
   - cargo build --verbose
   - cargo test --verbose
+  - cargo check --target thumbv7m-none-eabi # check for no_std
 matrix:
   allow_failures:
     - rust: nightly
