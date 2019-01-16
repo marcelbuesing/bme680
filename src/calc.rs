@@ -55,7 +55,10 @@ impl Calc {
         let temp_offset =  match temp_offset {
             None => 0i32,
             Some(offset) if offset == 0.0 => 0i32,
-            Some(offset) => offset.signum() as i32 * (((((offset.abs() * 100.0) as i32) << 8) - 128) / 5),
+            Some(offset) => {
+                let signum: i32 = if offset.gt(&0.0) { 1 } else { -1 };
+                signum * (((((offset * 100.0) as i32).abs() << 8) - 128) / 5)
+            },
         };
 
         let t_fine: i32 = (var2 + var3) as i32  + temp_offset;
