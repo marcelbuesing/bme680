@@ -6,7 +6,7 @@ rust:
 script:
   - cargo build --verbose
   - cargo test --verbose
-  - cd ci/no_std_test && cargo check --target thumbv7m-none-eabi # check for no_std
+  - cd ci/no_std_test && rustup target add thumbv7m-none-eabi && cargo check --target thumbv7m-none-eabi # check for no_std
 matrix:
   allow_failures:
     - rust: nightly
