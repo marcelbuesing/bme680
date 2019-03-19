@@ -1,4 +1,8 @@
 # Change Log
+## [0.4.3](https://github.com/marcelbuesing/bme680/tree/0.4.3) (2018-03-19)
+[Full Changelog](https://github.com/marcelbuesing/bme680/compare/0.4.2..0.4.3)
+- @caemor replaced non no_std compatible `f32.signum` and `f32.abs`. Fixes #14.
+
 ## [0.4.2](https://github.com/marcelbuesing/bme680/tree/0.4.2) (2018-01-05)
 [Full Changelog](https://github.com/marcelbuesing/bme680/compare/0.4.1..0.4.2)
 - `get_sensor_settings` now properly returns the configured temperature offset, closes #12.
