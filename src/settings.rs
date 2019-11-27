@@ -1,3 +1,4 @@
+use bitflags::bitflags;
 use core::time::Duration;
 
 /// Over-sampling settings

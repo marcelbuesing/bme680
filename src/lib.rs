@@ -44,12 +44,7 @@
 //! ```
 
 #![no_std]
-
-#[macro_use]
-extern crate bitflags;
-extern crate embedded_hal as hal;
-#[macro_use]
-extern crate log;
+#![forbid(unsafe_code)]
 
 pub use self::settings::{
     DesiredSensorSettings, GasSett, IIRFilterSize, OversamplingSetting, SensorSettings, Settings,
@@ -60,11 +55,13 @@ mod calc;
 mod settings;
 
 use crate::calc::Calc;
-
 use crate::hal::blocking::delay::DelayMs;
 use crate::hal::blocking::i2c::{Read, Write};
+
 use core::result;
 use core::time::Duration;
+use embedded_hal as hal;
+use log::{debug, error, info};
 
 /// BME680 General config
 pub const BME680_POLL_PERIOD_MS: u8 = 10;
