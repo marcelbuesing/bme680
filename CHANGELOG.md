@@ -1,4 +1,9 @@
 # Change Log
+## [0.5.0](https://github.com/marcelbuesing/bme680/tree/0.5.0) (2019-11-27)
+[Full Changelog](https://github.com/marcelbuesing/bme680/compare/0.4.3..0.5.0)
+- Migrate example to futures 0.3 and toko 0.2.
+- Migrate crate to Rust 2018 edition.
+
 ## [0.4.3](https://github.com/marcelbuesing/bme680/tree/0.4.3) (2018-03-19)
 [Full Changelog](https://github.com/marcelbuesing/bme680/compare/0.4.2..0.4.3)
 - @caemor replaced non no_std compatible `f32.signum` and `f32.abs`. Fixes #14.
