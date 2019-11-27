@@ -7,6 +7,9 @@ name = "bme680"
 repository = "https://github.com/marcelbuesing/bme680-hal"
 version = "0.5.0"
 edition = "2018"
+
+[badges]
+travis-ci = { repository = "https://github.com/marcelbuesing/bme680-hal", branch = "master" }
 maintenance = { status = "passively-maintained" }
 
 [dependencies]
