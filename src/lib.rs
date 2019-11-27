@@ -59,12 +59,12 @@ pub use self::settings::{
 mod calc;
 mod settings;
 
-use calc::Calc;
+use crate::calc::Calc;
 
+use crate::hal::blocking::delay::DelayMs;
+use crate::hal::blocking::i2c::{Read, Write};
 use core::result;
 use core::time::Duration;
-use hal::blocking::delay::DelayMs;
-use hal::blocking::i2c::{Read, Write};
 
 /// BME680 General config
 pub const BME680_POLL_PERIOD_MS: u8 = 10;
@@ -935,7 +935,8 @@ where
             data.status = data.status | buff[14] & BME680_HEAT_STAB_MSK;
 
             if data.status & BME680_NEW_DATA_MSK != 0 {
-                let (temp, t_fine) = Calc::calc_temperature(&self.calib, adc_temp, self.tph_sett.temperature_offset);
+                let (temp, t_fine) =
+                    Calc::calc_temperature(&self.calib, adc_temp, self.tph_sett.temperature_offset);
                 debug!(
                     "adc_temp: {} adc_pres: {} adc_hum: {} adc_gas_res: {}, t_fine: {}",
                     adc_temp, adc_pres, adc_hum, adc_gas_res, t_fine

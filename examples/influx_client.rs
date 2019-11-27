@@ -10,24 +10,25 @@ extern crate influent;
 extern crate linux_embedded_hal;
 extern crate tokio;
 
+use crate::futures::compat::Future01CompatExt;
 use bme680::{
     Bme680, FieldDataCondition, I2CAddress, IIRFilterSize, OversamplingSetting, PowerMode,
     SettingsBuilder,
 };
-use futures::Future;
-use linux_embedded_hal::*;
-use std::time::Duration;
-
+use futures::prelude::*;
 use influent::client::{Client, ClientError, Credentials};
 use influent::create_client;
 use influent::measurement::{Measurement, Value};
+use linux_embedded_hal::*;
+use std::time::Duration;
 
 const INFLUX_ADDRESS: &str = "http://127.0.0.1:8086";
 const INFLUX_USER: &str = "user";
 const INFLUX_PASSWORD: &str = "pass";
 const INFLUX_DATABASE: &str = "influxdb";
 
-fn main() -> Result<(), ()> {
+#[tokio::main]
+async fn main() -> Result<(), ()> {
     // Init device
     let i2c = I2cdev::new("/dev/i2c-1").unwrap();
     let mut dev = Bme680::init(i2c, Delay {}, I2CAddress::Primary)
@@ -88,28 +89,25 @@ fn main() -> Result<(), ()> {
             Value::Float(data.gas_resistance_ohm() as f64),
         );
 
-        let f = temperature_f
-            .join4(pressure_f, humidity_f, gas_f)
-            .map(|_| ())
-            .map_err(|e| eprintln!("Error: {:?}", e));
-
-        let mut rt = tokio::runtime::current_thread::Runtime::new().unwrap();
-        return rt.block_on(f);
+        if let Err(e) = future::try_join4(temperature_f, pressure_f, humidity_f, gas_f).await {
+            eprintln!("Error: {:?}", e);
+        }
     }
     Ok(())
 }
 
 /// Sends a measured value to the influx database
-fn send_value(
-    client: &Client,
+async fn send_value<'a>(
+    client: &dyn Client,
     type_name: &str,
-    value: Value,
-) -> impl Future<Item = (), Error = ClientError> {
+    value: Value<'a>,
+) -> Result<(), ClientError> {
     let mut measurement = Measurement::new("sensor");
     measurement.add_field("value", value);
     measurement.add_tag("id", "MAC");
     measurement.add_tag("name", "bme680");
     measurement.add_tag("type", type_name);
 
-    client.write_one(measurement, None)
+    client.write_one(measurement, None).compat().await?;
+    Ok(())
 }
