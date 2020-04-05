@@ -5,7 +5,7 @@ documentation = "https://docs.rs/bme680"
 license = "MIT"
 name = "bme680"
 repository = "https://github.com/marcelbuesing/bme680-hal"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2018"
 
 [badges]

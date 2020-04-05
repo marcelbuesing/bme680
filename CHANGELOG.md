@@ -1,4 +1,9 @@
 # Change Log
+## [0.5.1](https://github.com/marcelbuesing/bme680/tree/0.5.1) (2020-04-05)
+[Full Changelog](https://github.com/marcelbuesing/bme680/compare/0.5.0..0.5.1)
+- Update futures-timer and linux-embedded hal dependencies
+- Cleanup clippy warnings
+
 ## [0.5.0](https://github.com/marcelbuesing/bme680/tree/0.5.0) (2019-11-27)
 [Full Changelog](https://github.com/marcelbuesing/bme680/compare/0.4.3..0.5.0)
 - Migrate example to futures 0.3 and toko 0.2.
