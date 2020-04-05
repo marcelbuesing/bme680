@@ -496,9 +496,9 @@ where
                 I2CUtil::read_byte(&mut self.i2c, self.dev_id.addr(), BME680_CONF_ODR_FILT_ADDR)?;
 
             debug!("FILTER_SEL: true");
-            data = (data as (i32) & !0x1ci32
-                | tph_sett.filter.unwrap_or(IIRFilterSize::Size0) as (i32) << 2i32 & 0x1ci32)
-                as (u8);
+            data = (data as i32 & !0x1ci32
+                | (tph_sett.filter.unwrap_or(IIRFilterSize::Size0) as i32) << 2i32 & 0x1ci32)
+                as u8;
             reg[element_index] = (BME680_CONF_ODR_FILT_ADDR, data);
             element_index += 1;
         }
@@ -512,7 +512,7 @@ where
                 self.dev_id.addr(),
                 BME680_CONF_HEAT_CTRL_ADDR,
             )?;
-            data = (data as (i32) & !0x8i32 | gas_sett_heatr_ctrl as (i32) & 0x8) as (u8);
+            data = (data as i32 & !0x8i32 | gas_sett_heatr_ctrl as i32 & 0x8) as u8;
             reg[element_index] = (BME680_CONF_HEAT_CTRL_ADDR, data);
             element_index += 1;
         }
@@ -532,15 +532,13 @@ where
                     0,
                     5,
                 )?;
-                data = (data as (i32) & !0xe0i32 | tph_sett_os_temp as (i32) << 5i32 & 0xe0i32)
-                    as (u8);
+                data = (data as i32 & !0xe0i32 | (tph_sett_os_temp as i32) << 5i32 & 0xe0i32) as u8;
             }
 
             if desired_settings.contains(DesiredSensorSettings::OSP_SEL) {
                 debug!("OSP_SEL: true");
                 let tph_sett_os_pres = tph_sett.os_temp.expect("OS TEMP");
-                data = (data as (i32) & !0x1ci32 | tph_sett_os_pres as (i32) << 2i32 & 0x1ci32)
-                    as (u8);
+                data = (data as i32 & !0x1ci32 | (tph_sett_os_pres as i32) << 2i32 & 0x1ci32) as u8;
             }
             reg[element_index] = (BME680_CONF_T_P_MODE_ADDR, data);
             element_index += 1;
@@ -553,7 +551,7 @@ where
                 boundary_check::<I2C>(tph_sett.os_hum.map(|x| x as u8), "TphSett.os_hum", 0, 5)?;
             let mut data =
                 I2CUtil::read_byte(&mut self.i2c, self.dev_id.addr(), BME680_CONF_OS_H_ADDR)?;
-            data = (data as (i32) & !0x7i32 | tph_sett_os_hum as (i32) & 0x7i32) as (u8);
+            data = (data as i32 & !0x7i32 | tph_sett_os_hum as i32 & 0x7i32) as u8;
             reg[element_index] = (BME680_CONF_OS_H_ADDR, data);
             element_index += 1;
         }
@@ -570,16 +568,16 @@ where
 
             if desired_settings.contains(DesiredSensorSettings::RUN_GAS_SEL) {
                 debug!("RUN_GAS_SEL: true");
-                data = (data as (i32) & !0x10i32
-                    | gas_sett.run_gas_measurement as (i32) << 4i32 & 0x10i32)
-                    as (u8);
+                data = (data as i32 & !0x10i32
+                    | (gas_sett.run_gas_measurement as i32) << 4i32 & 0x10i32)
+                    as u8;
             }
 
             if desired_settings.contains(DesiredSensorSettings::NBCONV_SEL) {
                 debug!("NBCONV_SEL: true");
                 let gas_sett_nb_conv =
                     boundary_check::<I2C>(Some(gas_sett.nb_conv), "GasSett.nb_conv", 0, 10)?;
-                data = (data as (i32) & !0xfi32 | gas_sett_nb_conv as (i32) & 0xfi32) as (u8);
+                data = (data as i32 & !0xfi32 | gas_sett_nb_conv as i32 & 0xfi32) as u8;
             }
 
             reg[element_index] = (BME680_CONF_ODR_RUN_GAS_NBC_ADDR, data);
@@ -616,35 +614,34 @@ where
 
         if desired_settings.contains(DesiredSensorSettings::FILTER_SEL) {
             sensor_settings.tph_sett.filter = Some(IIRFilterSize::from_u8(
-                ((data_array[5usize] as (i32) & 0x1ci32) >> 2i32) as (u8),
+                ((data_array[5usize] as i32 & 0x1ci32) >> 2i32) as u8,
             ));
         }
 
         if desired_settings
             .contains(DesiredSensorSettings::OST_SEL | DesiredSensorSettings::OSP_SEL)
         {
-            let os_temp: u8 = ((data_array[4usize] as (i32) & 0xe0i32) >> 5i32) as (u8);
-            let os_pres: u8 = ((data_array[4usize] as (i32) & 0x1ci32) >> 2i32) as (u8);
+            let os_temp: u8 = ((data_array[4usize] as i32 & 0xe0i32) >> 5i32) as u8;
+            let os_pres: u8 = ((data_array[4usize] as i32 & 0x1ci32) >> 2i32) as u8;
             sensor_settings.tph_sett.os_temp = Some(OversamplingSetting::from_u8(os_temp));
             sensor_settings.tph_sett.os_pres = Some(OversamplingSetting::from_u8(os_pres));
         }
 
         if desired_settings.contains(DesiredSensorSettings::OSH_SEL) {
-            let os_hum: u8 = (data_array[2usize] as (i32) & 0x7i32) as (u8);
+            let os_hum: u8 = (data_array[2usize] as i32 & 0x7i32) as u8;
             sensor_settings.tph_sett.os_hum = Some(OversamplingSetting::from_u8(os_hum));
         }
 
         if desired_settings.contains(DesiredSensorSettings::HCNTRL_SEL) {
-            sensor_settings.gas_sett.heatr_ctrl =
-                Some((data_array[0usize] as (i32) & 0x8i32) as (u8));
+            sensor_settings.gas_sett.heatr_ctrl = Some((data_array[0usize] as i32 & 0x8i32) as u8);
         }
 
         if desired_settings
             .contains(DesiredSensorSettings::RUN_GAS_SEL | DesiredSensorSettings::NBCONV_SEL)
         {
-            sensor_settings.gas_sett.nb_conv = (data_array[1usize] as (i32) & 0xfi32) as (u8);
+            sensor_settings.gas_sett.nb_conv = (data_array[1usize] as i32 & 0xfi32) as u8;
             sensor_settings.gas_sett.run_gas_measurement =
-                ((data_array[1usize] as (i32) & 0x10i32) >> 4i32) == 0;
+                ((data_array[1usize] as i32 & 0x10i32) >> 4i32) == 0;
         }
 
         Ok(sensor_settings)
@@ -713,15 +710,15 @@ where
             + (duration.subsec_nanos() as u64 / NANOS_PER_MILLI);
 
         let mut meas_cycles = os_to_meas_cycles
-            [tph_sett.os_temp.unwrap_or(OversamplingSetting::OSNone) as (usize)]
-            as (u64);
+            [tph_sett.os_temp.unwrap_or(OversamplingSetting::OSNone) as usize]
+            as u64;
         meas_cycles = meas_cycles.wrapping_add(
-            os_to_meas_cycles[tph_sett.os_pres.unwrap_or(OversamplingSetting::OSNone) as (usize)]
-                as (u64),
+            os_to_meas_cycles[tph_sett.os_pres.unwrap_or(OversamplingSetting::OSNone) as usize]
+                as u64,
         );
         meas_cycles = meas_cycles.wrapping_add(
-            os_to_meas_cycles[tph_sett.os_hum.unwrap_or(OversamplingSetting::OSNone) as (usize)]
-                as (u64),
+            os_to_meas_cycles[tph_sett.os_hum.unwrap_or(OversamplingSetting::OSNone) as usize]
+                as u64,
         );
         let mut tph_dur = meas_cycles.wrapping_mul(1963u64);
         tph_dur = tph_dur.wrapping_add(477u64.wrapping_mul(4u64));
@@ -742,18 +739,18 @@ where
             .tph_sett
             .os_temp
             .unwrap_or(OversamplingSetting::OSNone)
-            as (usize)] as (u32);
+            as usize] as u32;
         meas_cycles = meas_cycles.wrapping_add(
             os_to_meas_cycles[sensor_settings
                 .tph_sett
                 .os_pres
-                .unwrap_or(OversamplingSetting::OSNone) as (usize)] as (u32),
+                .unwrap_or(OversamplingSetting::OSNone) as usize] as u32,
         );
         meas_cycles = meas_cycles.wrapping_add(
             os_to_meas_cycles[sensor_settings
                 .tph_sett
                 .os_hum
-                .unwrap_or(OversamplingSetting::OSNone) as (usize)] as (u32),
+                .unwrap_or(OversamplingSetting::OSNone) as usize] as u32,
         );
         let mut tph_dur = meas_cycles.wrapping_mul(1963u32);
         tph_dur = tph_dur.wrapping_add(477u32.wrapping_mul(4u32));
@@ -795,40 +792,32 @@ where
                 [BME680_COEFF_ADDR1_LEN..(BME680_COEFF_ADDR1_LEN + BME680_COEFF_ADDR2_LEN - 1)],
         )?;
 
-        calib.par_t1 = (coeff_array[34usize] as (u16) as (i32) << 8i32
-            | coeff_array[33usize] as (u16) as (i32)) as (u16);
-        calib.par_t2 = (coeff_array[2usize] as (u16) as (i32) << 8i32
-            | coeff_array[1usize] as (u16) as (i32)) as (i16);
-        calib.par_t3 = coeff_array[3usize] as (i8);
-        calib.par_p1 = (coeff_array[6usize] as (u16) as (i32) << 8i32
-            | coeff_array[5usize] as (u16) as (i32)) as (u16);
-        calib.par_p2 = (coeff_array[8usize] as (u16) as (i32) << 8i32
-            | coeff_array[7usize] as (u16) as (i32)) as (i16);
-        calib.par_p3 = coeff_array[9usize] as (i8);
-        calib.par_p4 = (coeff_array[12usize] as (u16) as (i32) << 8i32
-            | coeff_array[11usize] as (u16) as (i32)) as (i16);
-        calib.par_p5 = (coeff_array[14usize] as (u16) as (i32) << 8i32
-            | coeff_array[13usize] as (u16) as (i32)) as (i16);
-        calib.par_p6 = coeff_array[16usize] as (i8);
-        calib.par_p7 = coeff_array[15usize] as (i8);
-        calib.par_p8 = (coeff_array[20usize] as (u16) as (i32) << 8i32
-            | coeff_array[19usize] as (u16) as (i32)) as (i16);
-        calib.par_p9 = (coeff_array[22usize] as (u16) as (i32) << 8i32
-            | coeff_array[21usize] as (u16) as (i32)) as (i16);
+        calib.par_t1 = ((coeff_array[34usize] as i32) << 8i32 | coeff_array[33usize] as i32) as u16;
+        calib.par_t2 = ((coeff_array[2usize] as i32) << 8i32 | coeff_array[1usize] as i32) as i16;
+        calib.par_t3 = coeff_array[3usize] as i8;
+        calib.par_p1 = ((coeff_array[6usize] as i32) << 8i32 | coeff_array[5usize] as i32) as u16;
+        calib.par_p2 = ((coeff_array[8usize] as i32) << 8i32 | coeff_array[7usize] as i32) as i16;
+        calib.par_p3 = coeff_array[9usize] as i8;
+        calib.par_p4 = ((coeff_array[12usize] as i32) << 8i32 | coeff_array[11usize] as i32) as i16;
+        calib.par_p5 = ((coeff_array[14usize] as i32) << 8i32 | coeff_array[13usize] as i32) as i16;
+        calib.par_p6 = coeff_array[16usize] as i8;
+        calib.par_p7 = coeff_array[15usize] as i8;
+        calib.par_p8 = ((coeff_array[20usize] as i32) << 8i32 | coeff_array[19usize] as i32) as i16;
+        calib.par_p9 = ((coeff_array[22usize] as i32) << 8i32 | coeff_array[21usize] as i32) as i16;
         calib.par_p10 = coeff_array[23usize];
-        calib.par_h1 = (coeff_array[27usize] as (u16) as (i32) << 4i32
-            | coeff_array[26usize] as (i32) & 0xfi32) as (u16);
-        calib.par_h2 = (coeff_array[25usize] as (u16) as (i32) << 4i32
-            | coeff_array[26usize] as (i32) >> 4i32) as (u16);
-        calib.par_h3 = coeff_array[28usize] as (i8);
-        calib.par_h4 = coeff_array[29usize] as (i8);
-        calib.par_h5 = coeff_array[30usize] as (i8);
+        calib.par_h1 =
+            ((coeff_array[27usize] as i32) << 4i32 | coeff_array[26usize] as i32 & 0xfi32) as u16;
+        calib.par_h2 =
+            ((coeff_array[25usize] as i32) << 4i32 | coeff_array[26usize] as i32 >> 4i32) as u16;
+        calib.par_h3 = coeff_array[28usize] as i8;
+        calib.par_h4 = coeff_array[29usize] as i8;
+        calib.par_h5 = coeff_array[30usize] as i8;
         calib.par_h6 = coeff_array[31usize];
-        calib.par_h7 = coeff_array[32usize] as (i8);
-        calib.par_gh1 = coeff_array[37usize] as (i8);
-        calib.par_gh2 = (coeff_array[36usize] as (u16) as (i32) << 8i32
-            | coeff_array[35usize] as (u16) as (i32)) as (i16);
-        calib.par_gh3 = coeff_array[38usize] as (i8);
+        calib.par_h7 = coeff_array[32usize] as i8;
+        calib.par_gh1 = coeff_array[37usize] as i8;
+        calib.par_gh2 =
+            ((coeff_array[36usize] as i32) << 8i32 | coeff_array[35usize] as i32) as i16;
+        calib.par_gh3 = coeff_array[38usize] as i8;
 
         calib.res_heat_range =
             (I2CUtil::read_byte::<I2CX>(i2c, dev_id.addr(), BME680_ADDR_RES_HEAT_RANGE_ADDR)?
@@ -917,15 +906,15 @@ where
             data.gas_index = buff[0] & BME680_GAS_INDEX_MSK;
             data.meas_index = buff[1];
 
-            let adc_pres = (buff[2] as (u32)).wrapping_mul(4096)
-                | (buff[3] as (u32)).wrapping_mul(16)
-                | (buff[4] as (u32)).wrapping_div(16);
-            let adc_temp = (buff[5] as (u32)).wrapping_mul(4096)
-                | (buff[6] as (u32)).wrapping_mul(16)
-                | (buff[7] as (u32)).wrapping_div(16);
-            let adc_hum = ((buff[8] as (u32)).wrapping_mul(256) | buff[9] as (u32)) as (u16);
-            let adc_gas_res = ((buff[13] as (u32)).wrapping_mul(4)
-                | (buff[14] as (u32)).wrapping_div(64)) as (u16);
+            let adc_pres = (buff[2] as u32).wrapping_mul(4096)
+                | (buff[3] as u32).wrapping_mul(16)
+                | (buff[4] as u32).wrapping_div(16);
+            let adc_temp = (buff[5] as u32).wrapping_mul(4096)
+                | (buff[6] as u32).wrapping_mul(16)
+                | (buff[7] as u32).wrapping_div(16);
+            let adc_hum = ((buff[8] as u32).wrapping_mul(256) | buff[9] as u32) as u16;
+            let adc_gas_res =
+                ((buff[13] as u32).wrapping_mul(4) | (buff[14] as u32).wrapping_div(64)) as u16;
             let gas_range = buff[14] & BME680_GAS_RANGE_MSK;
 
             data.status = data.status | buff[14] & BME680_GASM_VALID_MSK;
