@@ -3,24 +3,15 @@
 /// continously send them to an influx database.
 /// Make sure you adapt the influx constants and likely also the i2c device id and I2CAddress.
 ///
-extern crate bme680;
-extern crate env_logger;
-extern crate futures;
-extern crate influent;
-extern crate linux_embedded_hal;
-extern crate tokio;
-
-use crate::futures::compat::Future01CompatExt;
 use bme680::{
     Bme680, FieldDataCondition, I2CAddress, IIRFilterSize, OversamplingSetting, PowerMode,
     SettingsBuilder,
 };
-use futures::prelude::*;
-use influent::client::{Client, ClientError, Credentials};
-use influent::create_client;
-use influent::measurement::{Measurement, Value};
+use influx_db_client::{points, Client, Point, Points, Precision, Value};
 use linux_embedded_hal::*;
 use std::time::Duration;
+use tokio::time::delay_for;
+use url::Url;
 
 const INFLUX_ADDRESS: &str = "http://127.0.0.1:8086";
 const INFLUX_USER: &str = "user";
@@ -45,69 +36,54 @@ async fn main() -> Result<(), ()> {
     dev.set_sensor_settings(settings)
         .map_err(|e| eprintln!("Setting sensor settings failed: {:?}", e))?;
 
-    // Set up Influx client
-    let credentials = Credentials {
-        username: INFLUX_USER,
-        password: INFLUX_PASSWORD,
-        database: INFLUX_DATABASE,
-    };
+    let client = Client::new(Url::parse(INFLUX_ADDRESS).unwrap(), INFLUX_DATABASE)
+        .set_authentication(INFLUX_USER, INFLUX_PASSWORD);
 
-    let hosts = vec![INFLUX_ADDRESS];
-    let client = create_client(credentials, hosts);
+    loop {
+        dev.set_sensor_mode(PowerMode::ForcedMode)
+            .map_err(|e| eprintln!("Setting sensor mode failed: {:?}", e))?;
+        let (data, state) = dev
+            .get_sensor_data()
+            .map_err(|e| eprintln!("Retrieving sensor data failed: {:?}", e))?;
 
-    dev.set_sensor_mode(PowerMode::ForcedMode)
-        .map_err(|e| eprintln!("Setting sensor mode failed: {:?}", e))?;
-    let (data, state) = dev
-        .get_sensor_data()
-        .map_err(|e| eprintln!("Retrieving sensor data failed: {:?}", e))?;
+        println!("State {:?}", state);
+        println!("Temperature {}°C", data.temperature_celsius());
+        println!("Pressure {}hPa", data.pressure_hpa());
+        println!("Humidity {}%", data.humidity_percent());
+        println!("Gas Resistence {}Ω", data.gas_resistance_ohm());
 
-    println!("State {:?}", state);
-    println!("Temperature {}°C", data.temperature_celsius());
-    println!("Pressure {}hPa", data.pressure_hpa());
-    println!("Humidity {}%", data.humidity_percent());
-    println!("Gas Resistence {}Ω", data.gas_resistance_ohm());
+        if state == FieldDataCondition::NewData {
+            let temperature_f = ipoint(
+                "temperature",
+                Value::Float(data.temperature_celsius() as f64),
+            );
+            let pressure_f = ipoint("pressure", Value::Float(data.pressure_hpa() as f64));
+            let humidity_f = ipoint("humidity", Value::Float(data.humidity_percent() as f64));
+            let gas_f = ipoint(
+                "gasresistence",
+                Value::Float(data.gas_resistance_ohm() as f64),
+            );
 
-    if state != FieldDataCondition::NewData {
-        let temperature_f = send_value(
-            &client,
-            "temperature",
-            Value::Float(data.temperature_celsius() as f64),
-        );
-        let pressure_f = send_value(
-            &client,
-            "pressure",
-            Value::Float(data.pressure_hpa() as f64),
-        );
-        let humidity_f = send_value(
-            &client,
-            "humidity",
-            Value::Float(data.humidity_percent() as f64),
-        );
-        let gas_f = send_value(
-            &client,
-            "gasresistence",
-            Value::Float(data.gas_resistance_ohm() as f64),
-        );
+            let points = points!(temperature_f, pressure_f, humidity_f, gas_f);
 
-        if let Err(e) = future::try_join4(temperature_f, pressure_f, humidity_f, gas_f).await {
-            eprintln!("Error: {:?}", e);
+            if let Err(e) = client
+                .write_points(points, Some(Precision::Seconds), None)
+                .await
+            {
+                eprintln!("Error: {:?}", e);
+            }
         }
+        delay_for(Duration::from_secs(10)).await;
     }
-    Ok(())
 }
 
 /// Sends a measured value to the influx database
-async fn send_value<'a>(
-    client: &dyn Client,
-    type_name: &str,
-    value: Value<'a>,
-) -> Result<(), ClientError> {
-    let mut measurement = Measurement::new("sensor");
-    measurement.add_field("value", value);
-    measurement.add_tag("id", "MAC");
-    measurement.add_tag("name", "bme680");
-    measurement.add_tag("type", type_name);
+fn ipoint(type_name: &str, value: Value) -> Point {
+    let point = Point::new("sensor")
+        .add_field("value", value)
+        .add_tag("id", Value::String("VMAC".to_string()))
+        .add_tag("name", Value::String("bme680".to_string()))
+        .add_tag("type", Value::String(type_name.to_string()));
 
-    client.write_one(measurement, None).compat().await?;
-    Ok(())
+    point
 }

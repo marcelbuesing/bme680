@@ -1,25 +1,20 @@
 #![no_std]
 
-extern crate bme680;
-extern crate embedded_hal;
-extern crate env_logger;
-extern crate linux_embedded_hal as hal;
-#[macro_use]
-extern crate log;
-
-use crate::hal::*;
 use bme680::*;
 use core::result;
 use core::time::Duration;
 use embedded_hal::blocking::delay::DelayMs;
 use embedded_hal::blocking::i2c;
+use linux_embedded_hal as hal;
+use linux_embedded_hal::Delay;
+use log::info;
 
 fn main(
 ) -> result::Result<(), Error<<hal::I2cdev as i2c::Read>::Error, <hal::I2cdev as i2c::Write>::Error>>
 {
     env_logger::init();
 
-    let i2c = I2cdev::new("/dev/i2c-1").unwrap();
+    let i2c = hal::I2cdev::new("/dev/i2c-1").unwrap();
 
     let mut dev = Bme680::init(i2c, Delay {}, I2CAddress::Primary)?;
     let mut delay = Delay {};

@@ -19,9 +19,9 @@ log = "0.4"
 
 [dev-dependencies]
 env_logger = "0.7"
-futures = { version = "0.3", features = ["compat"] }
-futures-timer = "3.0"
+futures = { version = "0.3" }
 i2cdev = "0.4"
-influent = "0.5"
+influx_db_client = { version = "0.4", default-features= false, features = ["rustls-tls"] }
 linux-embedded-hal = "0.3"
 tokio = {version = "0.2", features = ["full"] }
+url = "2.1"
