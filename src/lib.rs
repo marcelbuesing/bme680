@@ -774,8 +774,8 @@ where
     {
         let mut calib: CalibData = Default::default();
 
-        let mut coeff_array: [u8; (BME680_COEFF_ADDR1_LEN + BME680_COEFF_ADDR2_LEN)] =
-            [0; (BME680_COEFF_ADDR1_LEN + BME680_COEFF_ADDR2_LEN)];
+        let mut coeff_array: [u8; BME680_COEFF_ADDR1_LEN + BME680_COEFF_ADDR2_LEN] =
+            [0; BME680_COEFF_ADDR1_LEN + BME680_COEFF_ADDR2_LEN];
 
         I2CUtil::read_bytes::<I2CX>(
             i2c,
