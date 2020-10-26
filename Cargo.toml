@@ -18,10 +18,10 @@ embedded-hal = "1.0.0-alpha.2"
 log = "0.4"
 
 [dev-dependencies]
-env_logger = "0.7"
+env_logger = "0.8.1"
 futures = { version = "0.3" }
 i2cdev = "0.4"
 influx_db_client = { version = "0.4", default-features= false, features = ["rustls-tls"] }
 linux-embedded-hal = "0.3"
-tokio = {version = "0.2", features = ["full"] }
+tokio = {version = "0.3.1", features = ["full"] }
 url = "2.1"
