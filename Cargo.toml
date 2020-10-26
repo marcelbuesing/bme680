@@ -14,7 +14,7 @@ maintenance = { status = "passively-maintained" }
 
 [dependencies]
 bitflags = "1.2"
-embedded-hal = "0.2"
+embedded-hal = "1.0.0-alpha.2"
 log = "0.4"
 
 [dev-dependencies]
