@@ -191,12 +191,12 @@ impl PowerMode {
 /// To determine the slave address of your device you can use `i2cdetect -y 1` on linux.
 /// The 7-bit device address is 111011x. The 6 MSB bits are fixed.
 /// The last bit is changeable by SDO value and can be changed during operation.
-/// Connecting SDO to GND results in slave address 1110110 (0x76); connection it to V DDIO results in slave
+/// Connecting SDO to GND results in slave address 1110110 (0x76); connecting it to V DDIO results in slave
 /// address 1110111 (0x77), which is the same as BMP280’s I2C address.
 ///
 #[derive(Debug, Clone, Copy)]
 pub enum I2CAddress {
-    /// Primary Slave Address 0x77
+    /// Primary Slave Address 0x76
     Primary,
     /// Secondary Slave Address 0x77
     Secondary,
