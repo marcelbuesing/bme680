@@ -327,10 +327,10 @@ impl I2CUtil {
     {
         let mut buf = [0; 1];
 
-        i2c.write(dev_id, &mut [reg_addr])
+        i2c.try_write(dev_id, &mut [reg_addr])
             .map_err(|e| Error::I2CWrite(e))?;
 
-        match i2c.read(dev_id, &mut buf) {
+        match i2c.try_read(dev_id, &mut buf) {
             Ok(()) => Ok(buf[0]),
             Err(e) => Err(Error::I2CRead(e)),
         }
@@ -345,10 +345,10 @@ impl I2CUtil {
     where
         I2C: Read + Write,
     {
-        i2c.write(dev_id, &mut [reg_addr])
+        i2c.try_write(dev_id, &mut [reg_addr])
             .map_err(|e| Error::I2CWrite(e))?;
 
-        match i2c.read(dev_id, buf) {
+        match i2c.try_read(dev_id, buf) {
             Ok(()) => Ok(()),
             Err(e) => Err(Error::I2CRead(e)),
         }
@@ -407,10 +407,10 @@ where
     ) -> Result<(), <I2C as Read>::Error, <I2C as Write>::Error> {
         let tmp_buff: [u8; 2] = [BME680_SOFT_RESET_ADDR, BME680_SOFT_RESET_CMD];
 
-        i2c.write(dev_id.addr(), &tmp_buff)
+        i2c.try_write(dev_id.addr(), &tmp_buff)
             .map_err(|e| Error::I2CWrite(e))?;
 
-        delay.delay_ms(BME680_RESET_PERIOD);
+        delay.try_delay_ms(BME680_RESET_PERIOD);
         Ok(())
     }
 
@@ -462,7 +462,7 @@ where
                 reg_addr, tmp_buff
             );
             self.i2c
-                .write(self.dev_id.addr(), &tmp_buff)
+                .try_write(self.dev_id.addr(), &tmp_buff)
                 .map_err(|e| Error::I2CWrite(e))?;
         }
 
@@ -674,7 +674,7 @@ where
                 tmp_pow_mode = tmp_pow_mode & !BME680_MODE_MSK;
                 debug!("Setting to sleep tmp_pow_mode: {}", tmp_pow_mode);
                 self.bme680_set_regs(&[(BME680_CONF_T_P_MODE_ADDR, tmp_pow_mode)])?;
-                self.delay.delay_ms(BME680_POLL_PERIOD_MS);
+                self.delay.try_delay_ms(BME680_POLL_PERIOD_MS);
             } else {
                 // TODO do while in Rust?
                 break;
@@ -935,7 +935,7 @@ where
                 return Ok((data, FieldDataCondition::NewData));
             }
 
-            self.delay.delay_ms(BME680_POLL_PERIOD_MS);
+            self.delay.try_delay_ms(BME680_POLL_PERIOD_MS);
         }
         Ok((data, FieldDataCondition::Unchanged))
     }
