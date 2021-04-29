@@ -22,7 +22,8 @@ const INFLUX_DATABASE: &str = "influxdb";
 async fn main() -> Result<(), ()> {
     // Init device
     let i2c = I2cdev::new("/dev/i2c-1").unwrap();
-    let mut dev = Bme680::init(i2c, Delay {}, I2CAddress::Primary)
+    let mut delayer = Delay {};
+    let mut dev = Bme680::init(i2c, &mut delayer, I2CAddress::Primary)
         .map_err(|e| eprintln!("Init failed: {:?}", e))?;
 
     let settings = SettingsBuilder::new()
@@ -33,17 +34,17 @@ async fn main() -> Result<(), ()> {
         .with_gas_measurement(Duration::from_millis(1500), 320, 25)
         .with_run_gas(true)
         .build();
-    dev.set_sensor_settings(settings)
+    dev.set_sensor_settings(&mut delayer, settings)
         .map_err(|e| eprintln!("Setting sensor settings failed: {:?}", e))?;
 
     let client = Client::new(Url::parse(INFLUX_ADDRESS).unwrap(), INFLUX_DATABASE)
         .set_authentication(INFLUX_USER, INFLUX_PASSWORD);
 
     loop {
-        dev.set_sensor_mode(PowerMode::ForcedMode)
+        dev.set_sensor_mode(&mut delayer, PowerMode::ForcedMode)
             .map_err(|e| eprintln!("Setting sensor mode failed: {:?}", e))?;
         let (data, state) = dev
-            .get_sensor_data()
+            .get_sensor_data(&mut delayer)
             .map_err(|e| eprintln!("Retrieving sensor data failed: {:?}", e))?;
 
         println!("State {:?}", state);

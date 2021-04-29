@@ -15,8 +15,9 @@ fn main(
     env_logger::init();
 
     let i2c = hal::I2cdev::new("/dev/i2c-1").unwrap();
+    let mut delayer = Delay {};
 
-    let mut dev = Bme680::init(i2c, Delay {}, I2CAddress::Primary)?;
+    let mut dev = Bme680::init(i2c, &mut delayer, I2CAddress::Primary)?;
     let mut delay = Delay {};
 
     let settings = SettingsBuilder::new()
@@ -32,9 +33,9 @@ fn main(
     let profile_dur = dev.get_profile_dur(&settings.0)?;
     info!("Profile duration {:?}", profile_dur);
     info!("Setting sensor settings");
-    dev.set_sensor_settings(settings)?;
+    dev.set_sensor_settings(&mut delayer, settings)?;
     info!("Setting forced power modes");
-    dev.set_sensor_mode(PowerMode::ForcedMode)?;
+    dev.set_sensor_mode(&mut delayer, PowerMode::ForcedMode)?;
 
     let sensor_settings = dev.get_sensor_settings(settings.1);
     info!("Sensor settings: {:?}", sensor_settings);
@@ -44,9 +45,9 @@ fn main(
         let power_mode = dev.get_sensor_mode();
         info!("Sensor power mode: {:?}", power_mode);
         info!("Setting forced power modes");
-        dev.set_sensor_mode(PowerMode::ForcedMode)?;
+        dev.set_sensor_mode(&mut delayer, PowerMode::ForcedMode)?;
         info!("Retrieving sensor data");
-        let (data, _state) = dev.get_sensor_data()?;
+        let (data, _state) = dev.get_sensor_data(&mut delayer)?;
         info!("Sensor Data {:?}", data);
         info!("Temperature {}°C", data.temperature_celsius());
         info!("Pressure {}hPa", data.pressure_hpa());
