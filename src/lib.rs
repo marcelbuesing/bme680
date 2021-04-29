@@ -7,7 +7,8 @@
 
 //! extern crate bme680;
 //! extern crate embedded_hal;
-//! extern crate linux_embedded_hal as hal;
+//! // Note that you'll have to import your board crates types corresponding to
+//! // Delay and I2cdev.
 //!
 //! use bme680::*;
 //! use embedded_hal::blocking::i2c;
@@ -15,10 +16,43 @@
 //! use std::result;
 //! use std::time::Duration;
 //!
+//! # mod hal {
+//! #   use super::*;
+//! #   use embedded_hal::blocking::delay;
+//! #
+//! #   #[derive(Debug)]
+//! #   pub struct Delay {}
+//! #
+//! #   impl delay::DelayMs<u8> for Delay {
+//! #       fn delay_ms(&mut self, _ms: u8) {}
+//! #   }
+//! #
+//! #   #[derive(Debug)]
+//! #   pub enum I2CError {}
+//! #
+//! #   pub struct I2cdev {}
+//! #
+//! #   impl i2c::Write for I2cdev {
+//! #       type Error = I2CError;
+//! #
+//! #       fn write<'w>(&mut self, addr: u8, bytes: &'w [u8]) -> result::Result<(), Self::Error> {
+//! #           Ok(())
+//! #       }
+//! #   }
+//! #
+//! #   impl i2c::Read for I2cdev {
+//! #       type Error = I2CError;
+//! #
+//! #       fn read<'w>(&mut self, addr: u8, bytes: &'w mut [u8]) -> result::Result<(), Self::Error> {
+//! #           Ok(())
+//! #       }
+//! #   }
+//! # }
+//!
 //! fn main() -> result::Result<(), Error<<hal::I2cdev as i2c::Read>::Error, <hal::I2cdev as i2c::Write>::Error>>
 //! {
 //!     // Initialize device
-//!     let i2c = I2cdev::new("/dev/i2c-1").unwrap();
+//!     let i2c = I2cdev {}; // Your I2C device construction will look different, perhaps using I2cdev::new(..)
 //!     let mut dev = Bme680::init(i2c, Delay {}, I2CAddress::Primary)?;
 //!     let settings = SettingsBuilder::new()
 //!         .with_humidity_oversampling(OversamplingSetting::OS2x)
