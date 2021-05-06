@@ -26,19 +26,18 @@ impl Calc {
         const NANOS_PER_MILLI: u64 = 1_000_000;
         let mut dur = (duration.as_secs() as u64 * MILLIS_PER_SEC)
             + (duration.subsec_nanos() as u64 / NANOS_PER_MILLI);
-        let durval = if dur as i32 >= 0xfc0i32 {
+        if dur as i32 >= 0xfc0i32 {
             0xffu8 // Max duration
         } else {
             loop {
-                if !(dur as i32 > 0x3fi32) {
+                if dur as i32 <= 0x3fi32 {
                     break;
                 }
                 dur = (dur as i32 / 4i32) as u64;
                 factor = (factor as i32 + 1i32) as u8;
             }
             (dur as i32 + factor as i32 * 64i32) as u8
-        };
-        durval
+        }
     }
 
     ///
@@ -72,14 +71,14 @@ impl Calc {
 
     pub fn calc_pressure(calib: &CalibData, t_fine: i32, pres_adc: u32) -> u32 {
         let mut var1: i32 = (t_fine >> 1) - 64000;
-        let mut var2: i32 = ((var1 >> 2) * (var1 >> 2) >> 11) * calib.par_p6 as i32 >> 2;
-        var2 = var2 + (var1 * (calib.par_p5 as i32) << 1);
+        let mut var2: i32 = ((((var1 >> 2) * (var1 >> 2)) >> 11) * calib.par_p6 as i32) >> 2;
+        var2 += (var1 * (calib.par_p5 as i32)) << 1;
         var2 = (var2 >> 2i32) + ((calib.par_p4 as i32) << 16i32);
-        var1 = (((var1 >> 2i32) * (var1 >> 2i32) >> 13i32) * ((calib.par_p3 as i32) << 5i32)
+        var1 = (((((var1 >> 2i32) * (var1 >> 2i32)) >> 13i32) * ((calib.par_p3 as i32) << 5i32))
             >> 3i32)
-            + (calib.par_p2 as i32 * var1 >> 1i32);
-        var1 = var1 >> 18i32;
-        var1 = (32768i32 + var1) * calib.par_p1 as i32 >> 15i32;
+            + ((calib.par_p2 as i32 * var1) >> 1i32);
+        var1 >>= 18i32;
+        var1 = ((32768i32 + var1) * calib.par_p1 as i32) >> 15i32;
         let mut pressure_comp: i32 = 1048576u32.wrapping_sub(pres_adc) as i32;
         pressure_comp = ((pressure_comp - (var2 >> 12i32)) as u32).wrapping_mul(3125u32) as i32;
         if pressure_comp >= 0x40000000i32 {
@@ -87,35 +86,35 @@ impl Calc {
         } else {
             pressure_comp = ((pressure_comp << 1i32) as u32).wrapping_div(var1 as u32) as i32;
         }
-        var1 = calib.par_p9 as i32 * ((pressure_comp >> 3i32) * (pressure_comp >> 3i32) >> 13i32)
+        var1 = (calib.par_p9 as i32
+            * (((pressure_comp >> 3i32) * (pressure_comp >> 3i32)) >> 13i32))
             >> 12i32;
-        var2 = (pressure_comp >> 2i32) * calib.par_p8 as i32 >> 13i32;
-        let var3: i32 = (pressure_comp >> 8i32)
+        var2 = ((pressure_comp >> 2i32) * calib.par_p8 as i32) >> 13i32;
+        let var3: i32 = ((pressure_comp >> 8i32)
             * (pressure_comp >> 8i32)
             * (pressure_comp >> 8i32)
-            * calib.par_p10 as i32
+            * calib.par_p10 as i32)
             >> 17i32;
-        pressure_comp =
-            pressure_comp + (var1 + var2 + var3 + ((calib.par_p7 as i32) << 7i32) >> 4i32);
+        pressure_comp += (var1 + var2 + var3 + ((calib.par_p7 as i32) << 7i32)) >> 4i32;
         pressure_comp as u32
     }
 
     pub fn calc_humidity(calib: &CalibData, t_fine: i32, hum_adc: u16) -> u32 {
-        let temp_scaled: i32 = t_fine * 5i32 + 128i32 >> 8i32;
+        let temp_scaled: i32 = (t_fine * 5i32 + 128i32) >> 8i32;
         let var1: i32 = hum_adc as i32
             - calib.par_h1 as i32 * 16i32
-            - (temp_scaled * calib.par_h3 as i32 / 100i32 >> 1i32);
-        let var2: i32 = calib.par_h2 as i32
+            - ((temp_scaled * calib.par_h3 as i32 / 100i32) >> 1i32);
+        let var2: i32 = (calib.par_h2 as i32
             * (temp_scaled * calib.par_h4 as i32 / 100i32
-                + (temp_scaled * (temp_scaled * calib.par_h5 as i32 / 100i32) >> 6i32) / 100i32
-                + (1i32 << 14i32))
+                + ((temp_scaled * (temp_scaled * calib.par_h5 as i32 / 100i32)) >> 6i32) / 100i32
+                + (1i32 << 14i32)))
             >> 10i32;
         let var3: i32 = var1 * var2;
         let var4: i32 = (calib.par_h6 as i32) << 7i32;
-        let var4: i32 = var4 + temp_scaled * calib.par_h7 as i32 / 100i32 >> 4i32;
-        let var5: i32 = (var3 >> 14i32) * (var3 >> 14i32) >> 10i32;
-        let var6: i32 = var4 * var5 >> 1i32;
-        let mut calc_hum: i32 = (var3 + var6 >> 10i32) * 1000i32 >> 12i32;
+        let var4: i32 = (var4 + temp_scaled * calib.par_h7 as i32 / 100i32) >> 4i32;
+        let var5: i32 = ((var3 >> 14i32) * (var3 >> 14i32)) >> 10i32;
+        let var6: i32 = (var4 * var5) >> 1i32;
+        let mut calc_hum: i32 = (((var3 + var6) >> 10i32) * 1000i32) >> 12i32;
         if calc_hum > 100000i32 {
             calc_hum = 100000i32;
         } else if calc_hum < 0i32 {
@@ -161,10 +160,11 @@ impl Calc {
             250000u32,
             125000u32,
         ];
-        let var1: i64 =
-            (1340 + 5 * calib.range_sw_err as i64) * lookup_table1[gas_range as usize] as i64 >> 16;
+        let var1: i64 = ((1340 + 5 * calib.range_sw_err as i64)
+            * lookup_table1[gas_range as usize] as i64)
+            >> 16;
         let var2: u64 = (((gas_res_adc as i64) << 15) - 16777216 + var1) as u64;
-        let var3: i64 = lookup_table2[gas_range as usize] as i64 * var1 >> 9;
+        let var3: i64 = (lookup_table2[gas_range as usize] as i64 * var1) >> 9;
         let calc_gas_res: u32 = ((var3 + ((var2 as i64) >> 1i64)) / var2 as i64) as u32;
         calc_gas_res
     }

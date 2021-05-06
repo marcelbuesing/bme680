@@ -247,7 +247,7 @@ impl I2CAddress {
         match &self {
             I2CAddress::Primary => 0x76u8,
             I2CAddress::Secondary => 0x77u8,
-            I2CAddress::Other(addr) => addr.clone(),
+            I2CAddress::Other(addr) => *addr,
         }
     }
 }
@@ -378,8 +378,7 @@ impl I2CUtil {
     {
         let mut buf = [0; 1];
 
-        i2c.write(dev_id, &mut [reg_addr])
-            .map_err(|e| Error::I2CWrite(e))?;
+        i2c.write(dev_id, &[reg_addr]).map_err(Error::I2CWrite)?;
 
         match i2c.read(dev_id, &mut buf) {
             Ok(()) => Ok(buf[0]),
@@ -396,8 +395,7 @@ impl I2CUtil {
     where
         I2C: Read + Write,
     {
-        i2c.write(dev_id, &mut [reg_addr])
-            .map_err(|e| Error::I2CWrite(e))?;
+        i2c.write(dev_id, &[reg_addr]).map_err(Error::I2CWrite)?;
 
         match i2c.read(dev_id, buf) {
             Ok(()) => Ok(()),
@@ -459,7 +457,7 @@ where
         let tmp_buff: [u8; 2] = [BME680_SOFT_RESET_ADDR, BME680_SOFT_RESET_CMD];
 
         i2c.write(dev_id.addr(), &tmp_buff)
-            .map_err(|e| Error::I2CWrite(e))?;
+            .map_err(Error::I2CWrite)?;
 
         delay.delay_ms(BME680_RESET_PERIOD);
         Ok(())
@@ -482,10 +480,10 @@ where
             let calib = Bme680::<I2C, D>::get_calib_data::<I2C>(&mut i2c, dev_id)?;
             debug!("Calib data {:?}", calib);
             let dev = Bme680 {
-                i2c: i2c,
+                i2c,
                 delay: PhantomData,
-                dev_id: dev_id,
-                calib: calib,
+                dev_id,
+                calib,
                 power_mode: PowerMode::ForcedMode,
                 tph_sett: Default::default(),
                 gas_sett: Default::default(),
@@ -507,14 +505,14 @@ where
         }
 
         for (reg_addr, reg_data) in reg {
-            let tmp_buff: [u8; 2] = [reg_addr.clone(), reg_data.clone()];
+            let tmp_buff: [u8; 2] = [*reg_addr, *reg_data];
             debug!(
                 "Setting register reg: {:?} tmp_buf: {:?}",
                 reg_addr, tmp_buff
             );
             self.i2c
                 .write(self.dev_id.addr(), &tmp_buff)
-                .map_err(|e| Error::I2CWrite(e))?;
+                .map_err(Error::I2CWrite)?;
         }
 
         Ok(())
@@ -724,7 +722,7 @@ where
 
             if current_power_mode != PowerMode::SleepMode {
                 // Set to sleep
-                tmp_pow_mode = tmp_pow_mode & !BME680_MODE_MSK;
+                tmp_pow_mode &= !BME680_MODE_MSK;
                 debug!("Setting to sleep tmp_pow_mode: {}", tmp_pow_mode);
                 self.bme680_set_regs(&[(BME680_CONF_T_P_MODE_ADDR, tmp_pow_mode)])?;
                 delay.delay_ms(BME680_POLL_PERIOD_MS);
@@ -813,7 +811,7 @@ where
         tph_dur = tph_dur.wrapping_add(1u32);
         let mut duration = Duration::from_millis(tph_dur as u64);
         if sensor_settings.gas_sett.run_gas_measurement {
-            duration = duration + sensor_settings.gas_sett.heatr_dur.expect("Heatrdur");
+            duration += sensor_settings.gas_sett.heatr_dur.expect("Heatrdur");
         }
         Ok(duration)
     }
@@ -908,7 +906,7 @@ where
             ),
             (
                 BME680_GAS_WAIT0_ADDR,
-                Calc::calc_heater_dur(gas_sett.heatr_dur.unwrap_or(Duration::from_secs(0))),
+                Calc::calc_heater_dur(gas_sett.heatr_dur.unwrap_or_else(|| Duration::from_secs(0))),
             ),
         ];
 
@@ -917,9 +915,7 @@ where
     }
 
     fn get_gas_config(&mut self) -> Result<GasSett, <I2C as Read>::Error, <I2C as Write>::Error> {
-        let mut gas_sett: GasSett = Default::default();
-
-        gas_sett.heatr_temp = Some(I2CUtil::read_byte(
+        let heatr_temp = Some(I2CUtil::read_byte(
             &mut self.i2c,
             self.dev_id.addr(),
             BME680_ADDR_SENS_CONF_START,
@@ -930,7 +926,12 @@ where
             self.dev_id.addr(),
             BME680_ADDR_GAS_CONF_START,
         )? as u64;
-        gas_sett.heatr_dur = Some(Duration::from_millis(heatr_dur_ms));
+
+        let gas_sett = GasSett {
+            heatr_temp,
+            heatr_dur: Some(Duration::from_millis(heatr_dur_ms)),
+            ..Default::default()
+        };
 
         Ok(gas_sett)
     }
@@ -971,8 +972,8 @@ where
                 ((buff[13] as u32).wrapping_mul(4) | (buff[14] as u32).wrapping_div(64)) as u16;
             let gas_range = buff[14] & BME680_GAS_RANGE_MSK;
 
-            data.status = data.status | buff[14] & BME680_GASM_VALID_MSK;
-            data.status = data.status | buff[14] & BME680_HEAT_STAB_MSK;
+            data.status |= buff[14] & BME680_GASM_VALID_MSK;
+            data.status |= buff[14] & BME680_HEAT_STAB_MSK;
 
             if data.status & BME680_NEW_DATA_MSK != 0 {
                 let (temp, t_fine) =

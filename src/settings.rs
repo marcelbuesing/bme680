@@ -151,7 +151,7 @@ bitflags! {
 /// ```
 /// use bme680::{IIRFilterSize, OversamplingSetting, SettingsBuilder};
 /// use std::time::Duration;
-/// let settings = SettingsBuilder::new()
+/// let settings = SettingsBuilder::default()
 ///     .with_humidity_oversampling(OversamplingSetting::OS2x)
 ///     .with_pressure_oversampling(OversamplingSetting::OS4x)
 ///     .with_temperature_oversampling(OversamplingSetting::OS8x)
@@ -161,6 +161,7 @@ bitflags! {
 ///     .with_run_gas(true)
 ///     .build();
 /// ```
+#[derive(Default)]
 pub struct SettingsBuilder {
     desired_settings: DesiredSensorSettings,
     sensor_settings: SensorSettings,
@@ -171,11 +172,9 @@ pub type Settings = (SensorSettings, DesiredSensorSettings);
 
 impl SettingsBuilder {
     pub fn new() -> SettingsBuilder {
-        SettingsBuilder {
-            desired_settings: Default::default(),
-            sensor_settings: Default::default(),
-        }
+        SettingsBuilder::default()
     }
+
     pub fn with_temperature_filter(mut self, filter: IIRFilterSize) -> SettingsBuilder {
         self.sensor_settings.tph_sett.filter = Some(filter);
         self.desired_settings |= DesiredSensorSettings::FILTER_SEL;
