@@ -18,11 +18,11 @@ embedded-hal = "0.2"
 log = "0.4"
 
 [dev-dependencies]
-env_logger = "0.7"
+env_logger = "0.8"
 futures = { version = "0.3" }
 i2cdev = "0.4"
-influx_db_client = { version = "0.4", default-features= false, features = ["rustls-tls"] }
-tokio = {version = "0.2", features = ["full"] }
+influx_db_client = { version = "0.5", default-features= false, features = ["rustls-tls"] }
+tokio = {version = "1.5", features = ["full"] }
 url = "2.1"
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]

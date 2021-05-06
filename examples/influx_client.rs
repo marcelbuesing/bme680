@@ -10,7 +10,7 @@ use bme680::{
 use influx_db_client::{points, Client, Point, Points, Precision, Value};
 use linux_embedded_hal::*;
 use std::time::Duration;
-use tokio::time::delay_for;
+use tokio::time::sleep;
 use url::Url;
 
 const INFLUX_ADDRESS: &str = "http://127.0.0.1:8086";
@@ -74,7 +74,7 @@ async fn main() -> Result<(), ()> {
                 eprintln!("Error: {:?}", e);
             }
         }
-        delay_for(Duration::from_secs(10)).await;
+        sleep(Duration::from_secs(10)).await;
     }
 }
 
