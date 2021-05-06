@@ -22,6 +22,8 @@ env_logger = "0.7"
 futures = { version = "0.3" }
 i2cdev = "0.4"
 influx_db_client = { version = "0.4", default-features= false, features = ["rustls-tls"] }
-linux-embedded-hal = "0.3"
 tokio = {version = "0.2", features = ["full"] }
 url = "2.1"
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+linux-embedded-hal = "0.3"
