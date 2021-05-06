@@ -334,6 +334,19 @@ impl FieldData {
     pub fn gas_resistance_ohm(&self) -> u32 {
         self.gas_resistance
     }
+
+    /// Whether a real (and not a dummy) gas reading was performed.
+    pub fn gas_valid(&self) -> bool {
+        self.status & BME680_GASM_VALID_MSK != 0
+    }
+
+    /// Whether the heater target temperature for the gas reading was reached.
+    ///
+    /// If this values is `false`, the heating duration was likely too short or
+    /// the target temperature too high.
+    pub fn heat_stable(&self) -> bool {
+        self.status & BME680_HEAT_STAB_MSK != 0
+    }
 }
 
 /// Shows if new data is available
