@@ -1,5 +1,5 @@
-BME680 + Rust [![Build Status](https://travis-ci.org/marcelbuesing/bme680.svg?branch=master)](https://travis-ci.org/marcelbuesing/bme680)
-[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fmarcelbuesing%2Fbme680.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Fmarcelbuesing%2Fbme680?ref=badge_shield)
+BME680 + Rust [![Actions Status](https://github.com/marcelbuesing/bme680/workflows/Continuous%20integration/badge.svg)](https://github.com/marcelbuesing/bme680/actions?query=workflow%3A"Continuous+integration")
+[![Cargo Deny Status](https://img.shields.io/badge/cargo--deny-license%20checked-green)](https://github.com/marcelbuesing/bme680/actions?query=workflow%3A"Continuous+integration")
 =============
 
 This repository contains a pure Rust implementation for the [BME680](https://www.bosch-sensortec.com/bst/products/all_products/bme680) environmental sensor. The library can be used to read the gas, pressure, humidity and temperature sensors via I²C.
