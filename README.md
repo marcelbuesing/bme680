@@ -42,6 +42,3 @@ Below you may find examples of Chronograf graphs of an indoor measurement over a
 ![Humidity Graph](examples/res/influx_humidity.png "Humidity measurement in %")
 ![Air pressure Graph](examples/res/influx_pressure.png "Air pressure measurement in hPa")
 ![Gas resistance Graph](examples/res/influx_gas_resistance.png "Gas resistance measurement")
-
-## License
-[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fmarcelbuesing%2Fbme680.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2Fmarcelbuesing%2Fbme680?ref=badge_large)
