@@ -15,6 +15,7 @@
 //! use hal::*;
 //! use std::result;
 //! use std::time::Duration;
+//! use std::thread::sleep;
 //!
 //! # mod hal {
 //! #   use super::*;
@@ -64,9 +65,11 @@
 //!         .with_run_gas(true)
 //!         .build();
 //!     dev.set_sensor_settings(&mut delayer, settings)?;
+//!     let profile_duration = dev.get_profile_dur(&settings.0)?;
 //!
 //!     // Read sensor data
 //!     dev.set_sensor_mode(&mut delayer, PowerMode::ForcedMode)?;
+//!     sleep(profile_duration);
 //!     let (data, _state) = dev.get_sensor_data(&mut delayer)?;
 //!
 //!     println!("Temperature {}°C", data.temperature_celsius());
