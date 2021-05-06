@@ -1,4 +1,16 @@
 # Change Log
+## [0.6.0](https://github.com/marcelbuesing/bme680/tree/0.6.0) (2021-05-06)
+[Full Changelog](https://github.com/marcelbuesing/bme680/compare/0.5.1..0.6.0)
+- @jgosmann Add missing sleep to example. Closes #23.
+  One has to sleep for the duration of the configured profile to read
+  proper data.
+- @jgosmann Expose gas_valid and heat_stab.
+  The BME680 datasheet recommends to check these values to ensure that a
+  gas reading is valid. To do so, they must be exposed by the library.
+- @huntc avoid retaining ownership of delayer, by passing the `delayer` as mutable reference.
+- @huntc make Doctests work on non linux environments.
+- Update influx example dependency to tokio 1.5
+
 ## [0.5.1](https://github.com/marcelbuesing/bme680/tree/0.5.1) (2020-04-05)
 [Full Changelog](https://github.com/marcelbuesing/bme680/compare/0.5.0..0.5.1)
 - Update futures-timer and linux-embedded hal dependencies
