@@ -93,8 +93,8 @@ mod calc;
 mod settings;
 
 use crate::calc::Calc;
-use crate::hal::blocking::delay::DelayMs;
-use crate::hal::blocking::i2c::{Read, Write};
+use crate::hal::delay::blocking::DelayMs;
+use crate::hal::i2c::blocking::{Read, Write};
 
 use core::time::Duration;
 use core::{marker::PhantomData, result};
@@ -172,6 +172,7 @@ pub enum Error<R, W> {
     ///
     I2CWrite(W),
     I2CRead(R),
+    Delay,
     ///
     /// aka BME680_E_DEV_NOT_FOUND
     ///
@@ -459,7 +460,9 @@ where
         i2c.write(dev_id.addr(), &tmp_buff)
             .map_err(Error::I2CWrite)?;
 
-        delay.delay_ms(BME680_RESET_PERIOD);
+        delay
+            .delay_ms(BME680_RESET_PERIOD)
+            .map_err(|_| Error::Delay)?;
         Ok(())
     }
 
@@ -725,7 +728,9 @@ where
                 tmp_pow_mode &= !BME680_MODE_MSK;
                 debug!("Setting to sleep tmp_pow_mode: {}", tmp_pow_mode);
                 self.bme680_set_regs(&[(BME680_CONF_T_P_MODE_ADDR, tmp_pow_mode)])?;
-                delay.delay_ms(BME680_POLL_PERIOD_MS);
+                delay
+                    .delay_ms(BME680_POLL_PERIOD_MS)
+                    .map_err(|_| Error::Delay)?;
             } else {
                 // TODO do while in Rust?
                 break;
@@ -990,7 +995,9 @@ where
                 return Ok((data, FieldDataCondition::NewData));
             }
 
-            delay.delay_ms(BME680_POLL_PERIOD_MS);
+            delay
+                .delay_ms(BME680_POLL_PERIOD_MS)
+                .map_err(|_| Error::Delay)?;
         }
         Ok((data, FieldDataCondition::Unchanged))
     }
