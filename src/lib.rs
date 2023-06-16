@@ -101,6 +101,9 @@ use core::{marker::PhantomData, result};
 use embedded_hal as hal;
 use log::{debug, error, info};
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 /// BME680 General config
 pub const BME680_POLL_PERIOD_MS: u8 = 10;
 
@@ -299,6 +302,8 @@ impl Clone for CalibData {
 
 /// Contains read sensors values  e.g. temperature, pressure, humidity etc.
 #[derive(Debug, Default, Copy)]
+#[cfg(feature = "serde")]
+#[derive(Serialize, Deserialize)]
 #[repr(C)]
 pub struct FieldData {
     /// Contains new_data, gasm_valid & heat_stab
