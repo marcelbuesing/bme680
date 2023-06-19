@@ -302,8 +302,7 @@ impl Clone for CalibData {
 
 /// Contains read sensors values  e.g. temperature, pressure, humidity etc.
 #[derive(Debug, Default, Copy)]
-#[cfg(feature = "serde")]
-#[derive(Serialize, Deserialize)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[repr(C)]
 pub struct FieldData {
     /// Contains new_data, gasm_valid & heat_stab
