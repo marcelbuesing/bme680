@@ -162,6 +162,7 @@ const BME680_GAS_INDEX_MSK: u8 = 0x0f;
 const BME680_GAS_RANGE_MSK: u8 = 0x0f;
 const BME680_GASM_VALID_MSK: u8 = 0x20;
 const BME680_HEAT_STAB_MSK: u8 = 0x10;
+const BME680_MEASURING_MSK: u8 = 0x20;
 
 /// Buffer length macro declaration
 const BME680_TMP_BUFFER_LENGTH: usize = 40;
@@ -513,6 +514,10 @@ where
 
         for (reg_addr, reg_data) in reg {
             let tmp_buff: [u8; 2] = [*reg_addr, *reg_data];
+            while self.is_measuring()? {
+            
+            }
+    
             debug!(
                 "Setting register reg: {:?} tmp_buf: {:?}",
                 reg_addr, tmp_buff
@@ -943,6 +948,17 @@ where
         };
 
         Ok(gas_sett)
+    }
+
+    fn is_measuring(&mut self)->Result<bool, <I2C as Read>::Error, <I2C as Write>::Error>{
+        let val :u8 = 0;
+        I2CUtil::read_bytes(
+            &mut self.i2c,
+            self.dev_id.addr(),
+            BME680_FIELD0_ADDR,
+            &mut [val],
+        )?;        
+        Ok(val & BME680_MEASURING_MSK != 0)
     }
 
     /// Retrieve the current sensor informations
