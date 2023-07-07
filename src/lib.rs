@@ -474,17 +474,28 @@ where
         mut i2c: I2C,
         delay: &mut D,
         dev_id: I2CAddress,
-    ) -> Result<Bme680<I2C, D>, <I2C as Read>::Error, <I2C as Write>::Error> {
-        Bme680::soft_reset(&mut i2c, delay, dev_id)?;
+    ) -> result::Result<Bme680<I2C, D>, (Error<<I2C as Read>::Error, <I2C as Write>::Error>, I2C)>
+    {
+        if let Err(e) = Bme680::soft_reset(&mut i2c, delay, dev_id) {
+            return Err((e, i2c));
+        }
 
         debug!("Reading chip id");
         /* Soft reset to restore it to default values*/
-        let chip_id = I2CUtil::read_byte::<I2C>(&mut i2c, dev_id.addr(), BME680_CHIP_ID_ADDR)?;
+        let chip_id = match I2CUtil::read_byte::<I2C>(&mut i2c, dev_id.addr(), BME680_CHIP_ID_ADDR)
+        {
+            Ok(chip_id) => chip_id,
+            Err(e) => return Err((e, i2c)),
+        };
+
         debug!("Chip id: {}", chip_id);
 
         if chip_id == BME680_CHIP_ID {
             debug!("Reading calib data");
-            let calib = Bme680::<I2C, D>::get_calib_data::<I2C>(&mut i2c, dev_id)?;
+            let calib = match Bme680::<I2C, D>::get_calib_data::<I2C>(&mut i2c, dev_id) {
+                Ok(calib) => calib,
+                Err(e) => return Err((e, i2c)),
+            };
             debug!("Calib data {:?}", calib);
             let dev = Bme680 {
                 i2c,
@@ -499,8 +510,12 @@ where
             Ok(dev)
         } else {
             error!("Device does not match chip id {}", BME680_CHIP_ID);
-            Err(Error::DeviceNotFound)
+            Err((Error::DeviceNotFound, i2c))
         }
+    }
+
+    pub fn destroy(self) -> I2C {
+        self.i2c
     }
 
     fn bme680_set_regs(
