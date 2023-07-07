@@ -503,6 +503,10 @@ where
         }
     }
 
+    pub fn destroy(self) -> I2C {
+        self.i2c
+    }
+
     fn bme680_set_regs(
         &mut self,
         reg: &[(u8, u8)],
