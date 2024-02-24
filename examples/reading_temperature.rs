@@ -3,14 +3,14 @@
 use bme680::*;
 use core::result;
 use core::time::Duration;
-use embedded_hal::blocking::delay::DelayMs;
-use embedded_hal::blocking::i2c;
+use embedded_hal::i2c::blocking::Read;
+use embedded_hal::i2c::blocking::Write;
+use embedded_hal::delay::blocking::DelayMs;
 use linux_embedded_hal as hal;
 use linux_embedded_hal::Delay;
 use log::info;
 
-fn main(
-) -> result::Result<(), Error<<hal::I2cdev as i2c::Read>::Error, <hal::I2cdev as i2c::Write>::Error>>
+fn main() -> result::Result<(), Error<<hal::I2cdev as Read>::Error, <hal::I2cdev as Write>::Error>>
 {
     env_logger::init();
 
@@ -41,7 +41,7 @@ fn main(
     info!("Sensor settings: {:?}", sensor_settings);
 
     loop {
-        delay.delay_ms(5000u32);
+        let _ = delay.delay_ms(5000u32);
         let power_mode = dev.get_sensor_mode();
         info!("Sensor power mode: {:?}", power_mode);
         info!("Setting forced power modes");
