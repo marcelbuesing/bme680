@@ -6,7 +6,7 @@ license = "MIT"
 name = "bme680"
 repository = "https://github.com/dnutiu/bme680-rust"
 version = "0.7.0"
-edition = "2018"
+edition = "2021"
 
 [badges]
 maintenance = { status = "passively-maintained" }
