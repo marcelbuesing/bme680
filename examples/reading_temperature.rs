@@ -3,14 +3,12 @@
 use bme680::*;
 use core::result;
 use core::time::Duration;
-use embedded_hal::i2c::blocking::Read;
-use embedded_hal::i2c::blocking::Write;
-use embedded_hal::delay::blocking::DelayMs;
+use embedded_hal::delay::DelayNs;
 use linux_embedded_hal as hal;
-use linux_embedded_hal::Delay;
+use linux_embedded_hal::{Delay, I2CError};
 use log::info;
 
-fn main() -> result::Result<(), Error<<hal::I2cdev as Read>::Error, <hal::I2cdev as Write>::Error>>
+fn main() -> result::Result<(), Error<I2CError>>
 {
     env_logger::init();
 
