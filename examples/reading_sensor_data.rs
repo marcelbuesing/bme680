@@ -1,12 +1,13 @@
 #![no_std]
 
-use bme680::*;
+use bme680::{Bme680, Error, I2CAddress, IIRFilterSize, OversamplingSetting, PowerMode, SettingsBuilder};
 use core::result;
 use core::time::Duration;
 use embedded_hal::delay::DelayNs;
 use linux_embedded_hal as hal;
 use linux_embedded_hal::{Delay, I2CError};
 use log::info;
+
 
 // Please export RUST_LOG=info in order to see logs in the console.
 fn main() -> result::Result<(), Error<I2CError>>

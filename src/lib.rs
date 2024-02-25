@@ -6,7 +6,7 @@
 //! ```no_run
 
 
-//! use crate::*;
+//! use bme680::{Bme680, Error, I2CAddress, IIRFilterSize, OversamplingSetting, PowerMode, SettingsBuilder};
 //! use core::result;
 //! use core::time::Duration;
 //! use embedded_hal::delay::DelayNs;
