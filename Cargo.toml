@@ -1,11 +1,11 @@
 [package]
-authors = ["marcelbuesing <buesing.marcel@googlemail.com>"]
+authors = ["marcelbuesing <buesing.marcel@googlemail.com>", "denisnutiu <denis.nutiu@googlemail.com>"]
 description = "A pure Rust implementation for the BME680 environmental sensor."
-documentation = "https://docs.rs/bme680"
+documentation = "https://github.com/dnutiu/bme680-rust"
 license = "MIT"
 name = "bme680"
-repository = "https://github.com/marcelbuesing/bme680-hal"
-version = "0.6.0"
+repository = "https://github.com/dnutiu/bme680-rust"
+version = "0.7.0"
 edition = "2018"
 
 [badges]
