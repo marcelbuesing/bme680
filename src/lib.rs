@@ -573,7 +573,7 @@ impl<I2C, D> Bme680<I2C, D>
 
             if desired_settings.contains(DesiredSensorSettings::OSP_SEL) {
                 debug!("OSP_SEL: true");
-                let tph_sett_os_pres = tph_sett.os_temp.expect("OS TEMP");
+                let tph_sett_os_pres = tph_sett.os_temp.unwrap_or(OversamplingSetting::OS1x);
                 data = (data as i32 & !0x1ci32 | (tph_sett_os_pres as i32) << 2i32 & 0x1ci32) as u8;
             }
             reg[element_index] = (BME680_CONF_T_P_MODE_ADDR, data);
@@ -798,7 +798,7 @@ impl<I2C, D> Bme680<I2C, D>
         tph_dur = tph_dur.wrapping_add(1u32);
         let mut duration = Duration::from_millis(tph_dur as u64);
         if sensor_settings.gas_sett.run_gas_measurement {
-            duration += sensor_settings.gas_sett.heatr_dur.expect("Heatrdur");
+            duration += sensor_settings.gas_sett.heatr_dur.unwrap_or(Duration::default());
         }
         Ok(duration)
     }
