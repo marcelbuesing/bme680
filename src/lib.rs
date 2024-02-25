@@ -89,10 +89,10 @@ pub use self::settings::{
     SettingsBuilder, TphSett,
 };
 
-mod calc;
+mod calculation;
 mod settings;
 
-use crate::calc::Calc;
+use crate::calculation::Calculation;
 use crate::hal::delay::DelayNs;
 use crate::hal::i2c::I2c;
 
@@ -266,7 +266,7 @@ impl Default for I2CAddress {
 /// Calibration data used during initalization
 #[derive(Debug, Default, Copy)]
 #[repr(C)]
-pub struct CalibData {
+pub struct CalibrationData {
     pub par_h1: u16,
     pub par_h2: u16,
     pub par_h3: i8,
@@ -295,7 +295,7 @@ pub struct CalibData {
     pub range_sw_err: u8,
 }
 
-impl Clone for CalibData {
+impl Clone for CalibrationData {
     fn clone(&self) -> Self {
         *self
     }
@@ -416,7 +416,7 @@ pub struct Bme680<I2C, D> {
     i2c: I2C,
     delay: PhantomData<D>,
     dev_id: I2CAddress,
-    calib: CalibData,
+    calib: CalibrationData,
     // TODO remove ? as it may not reflect the state of the device
     tph_sett: TphSett,
     // TODO remove ? as it may not reflect the state of the device
@@ -826,11 +826,11 @@ impl<I2C, D> Bme680<I2C, D>
     fn get_calib_data<I2CX>(
         i2c: &mut I2CX,
         dev_id: I2CAddress,
-    ) -> Result<CalibData, <I2C as ErrorType>::Error>
+    ) -> Result<CalibrationData, <I2C as ErrorType>::Error>
         where
             I2CX: I2c,
     {
-        let mut calib: CalibData = Default::default();
+        let mut calib: CalibrationData = Default::default();
 
         let mut coeff_array: [u8; BME680_COEFF_ADDR1_LEN + BME680_COEFF_ADDR2_LEN] =
             [0; BME680_COEFF_ADDR1_LEN + BME680_COEFF_ADDR2_LEN];
@@ -905,7 +905,7 @@ impl<I2C, D> Bme680<I2C, D>
         let reg: [(u8, u8); 2] = [
             (
                 BME680_RES_HEAT0_ADDR,
-                Calc::calc_heater_res(
+                Calculation::heater_resistance(
                     &self.calib,
                     gas_sett.ambient_temperature,
                     gas_sett.heatr_temp.unwrap_or(0),
@@ -913,7 +913,7 @@ impl<I2C, D> Bme680<I2C, D>
             ),
             (
                 BME680_GAS_WAIT0_ADDR,
-                Calc::calc_heater_dur(gas_sett.heatr_dur.unwrap_or_else(|| Duration::from_secs(0))),
+                Calculation::heater_duration(gas_sett.heatr_dur.unwrap_or_else(|| Duration::from_secs(0))),
             ),
         ];
 
@@ -984,16 +984,16 @@ impl<I2C, D> Bme680<I2C, D>
 
             if data.status & BME680_NEW_DATA_MSK != 0 {
                 let (temp, t_fine) =
-                    Calc::calc_temperature(&self.calib, adc_temp, self.tph_sett.temperature_offset);
+                    Calculation::temperature(&self.calib, adc_temp, self.tph_sett.temperature_offset);
                 debug!(
                     "adc_temp: {} adc_pres: {} adc_hum: {} adc_gas_res: {}, t_fine: {}",
                     adc_temp, adc_pres, adc_hum, adc_gas_res, t_fine
                 );
                 data.temperature = temp;
-                data.pressure = Calc::calc_pressure(&self.calib, t_fine, adc_pres);
-                data.humidity = Calc::calc_humidity(&self.calib, t_fine, adc_hum);
+                data.pressure = Calculation::pressure(&self.calib, t_fine, adc_pres);
+                data.humidity = Calculation::humidity(&self.calib, t_fine, adc_hum);
                 data.gas_resistance =
-                    Calc::calc_gas_resistance(&self.calib, adc_gas_res, gas_range);
+                    Calculation::gas_resistance(&self.calib, adc_gas_res, gas_range);
                 return Ok((data, FieldDataCondition::NewData));
             }
 
