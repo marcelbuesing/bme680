@@ -1,9 +1,0 @@
-[package]
-name = "no_std_test"
-version = "0.1.0"
-authors = ["marcelbuesing <buesing.marcel@googlemail.com>"]
-edition = "2018"
-
-[dependencies]
-bme680 = { path = "../../"}
-log = "0.4"
