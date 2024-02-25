@@ -8,6 +8,7 @@ use linux_embedded_hal as hal;
 use linux_embedded_hal::{Delay, I2CError};
 use log::info;
 
+// Please export RUST_LOG=info in order to see logs in the console.
 fn main() -> result::Result<(), Error<I2CError>>
 {
     env_logger::init();
