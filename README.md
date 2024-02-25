@@ -1,7 +1,10 @@
 BME680 Rust Library
 =============
 
-This repository contains a pure Rust implementation for the [BME680](https://www.bosch-sensortec.com/bst/products/all_products/bme680) environmental sensor. The library can be used to read the gas, pressure, humidity and temperature sensors via I²C.
+This repository contains a pure Rust implementation for the [BME680](https://www.bosch-sensortec.com/bst/products/all_products/bme680) environmental sensor. 
+The library can be used to read the gas, pressure, humidity and temperature sensors via I²C.
+
+It is a fork of the library written by Marcel Buessing: https://github.com/marcelbuesing/bme680.
 
 To use this library, create a new project and add it as a dependency:
 
