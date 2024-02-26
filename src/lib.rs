@@ -6,23 +6,23 @@
 //! ```no_run
 
 
-//! use bme680::{Bme680, Bme680Error, I2CAddress, IIRFilterSize, OversamplingSetting, PowerMode, SettingsBuilder};
-//! use core::result;
+//! use bme680::{Bme680, Bme680Error, IIRFilterSize, OversamplingSetting, PowerMode, SettingsBuilder};
 //! use core::time::Duration;
 //! use embedded_hal::delay::DelayNs;
 //! use linux_embedded_hal as hal;
-//! use linux_embedded_hal::{Delay, I2CError};
+//! use linux_embedded_hal::Delay;
 //! use log::info;
+//! use bme680::i2c::Address;
 //!
 //! // Please export RUST_LOG=info in order to see logs in the console.
-//! fn main() -> result::Result<(), Bme680Error>
+//! fn main() -> Result<(), Bme680Error>
 //! {
 //!     env_logger::init();
 //!
 //!     let i2c = hal::I2cdev::new("/dev/i2c-1").unwrap();
 //!     let mut delayer = Delay {};
 //!
-//!     let mut dev = Bme680::init(i2c, &mut delayer, I2CAddress::Primary)?;
+//!     let mut dev = Bme680::init(i2c, &mut delayer, Address::Primary)?;
 //!     let mut delay = Delay {};
 //!
 //!     let settings = SettingsBuilder::new()
@@ -71,18 +71,20 @@ pub use self::settings::{
 
 mod calculation;
 mod settings;
+pub mod i2c;
 
 use crate::calculation::Calculation;
 use crate::hal::delay::DelayNs;
 use crate::hal::i2c::I2c;
 
 use core::time::Duration;
-use core::{marker::PhantomData};
+use core::marker::PhantomData;
 use embedded_hal as hal;
 use log::{debug, error, info};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+use i2c::{Address, I2CUtility};
 use crate::Bme680Error::{I2CRead, I2CWrite};
 
 /// BME680 General config
@@ -205,35 +207,6 @@ impl PowerMode {
     }
 }
 
-///
-/// I2C Address represents the I2C address of the BME680 Sensor.
-///
-#[derive(Debug, Clone, Copy)]
-pub enum I2CAddress {
-    /// Primary Address 0x76
-    Primary,
-    /// Secondary Address 0x77
-    Secondary,
-    /// Alternative address
-    Other(u8),
-}
-
-impl I2CAddress {
-    pub fn addr(&self) -> u8 {
-        match &self {
-            I2CAddress::Primary => 0x76u8,
-            I2CAddress::Secondary => 0x77u8,
-            I2CAddress::Other(addr) => *addr,
-        }
-    }
-}
-
-impl Default for I2CAddress {
-    fn default() -> I2CAddress {
-        I2CAddress::Primary
-    }
-}
-
 /// Calibration data used during initialization
 #[derive(Debug, Default, Copy)]
 #[repr(C)]
@@ -342,52 +315,12 @@ pub enum FieldDataCondition {
     Unchanged,
 }
 
-/// I2CUtility is a simple wrapper over the I2c trait to make reading and writing data easier.
-struct I2CUtility {}
-
-impl I2CUtility {
-    pub fn read_byte<I2C>(
-        i2c: &mut I2C,
-        dev_id: u8,
-        reg_addr: u8,
-    ) -> Result<u8, Bme680Error>
-        where
-            I2C: I2c
-    {
-        let mut buf = [0; 1];
-
-        i2c.write(dev_id, &[reg_addr]).map_err(|_e| { I2CWrite })?;
-
-        match i2c.read(dev_id, &mut buf) {
-            Ok(()) => Ok(buf[0]),
-            Err(_e) => Err(I2CRead),
-        }
-    }
-
-    pub fn read_bytes<I2C>(
-        i2c: &mut I2C,
-        dev_id: u8,
-        reg_addr: u8,
-        buf: &mut [u8],
-    ) -> Result<(), Bme680Error>
-        where
-            I2C: I2c,
-    {
-        i2c.write(dev_id, &[reg_addr]).map_err(|_e| { I2CWrite })?;
-
-        match i2c.read(dev_id, buf) {
-            Ok(()) => Ok(()),
-            Err(_e) => Err(I2CRead),
-        }
-    }
-}
-
 /// Driver for the BME680 environmental sensor
 #[repr(C)]
 pub struct Bme680<I2C, D> {
     i2c_bus_handle: I2C,
     delay: PhantomData<D>,
-    device_address: I2CAddress,
+    device_address: Address,
     calibration_data: CalibrationData,
     temperature_offset: f32,
     power_mode: PowerMode,
@@ -423,7 +356,7 @@ fn boundary_check_u8(
     Ok(value)
 }
 
-impl<I2C, D> Bme680<I2C, D>
+impl<I2C: I2c, D: DelayNs> Bme680<I2C, D>
     where
         D: DelayNs,
         I2C: I2c,
@@ -431,12 +364,10 @@ impl<I2C, D> Bme680<I2C, D>
     pub fn soft_reset(
         i2c: &mut I2C,
         delay: &mut D,
-        dev_id: I2CAddress,
+        dev_id: Address,
     ) -> Result<(), Bme680Error> {
         let tmp_buff: [u8; 2] = [BME680_SOFT_RESET_ADDR, BME680_SOFT_RESET_CMD];
-
-        i2c.write(dev_id.addr(), &tmp_buff).map_err(|_e| { I2CWrite })?;
-
+        I2CUtility::write_bytes(i2c, dev_id.addr(), &tmp_buff)?;
         delay.delay_ms(BME680_RESET_PERIOD as u32);
         Ok(())
     }
@@ -444,7 +375,7 @@ impl<I2C, D> Bme680<I2C, D>
     pub fn init(
         mut i2c: I2C,
         delay: &mut D,
-        dev_id: I2CAddress,
+        dev_id: Address,
     ) -> Result<Bme680<I2C, D>, Bme680Error> {
         Bme680::soft_reset(&mut i2c, delay, dev_id)?;
 
@@ -765,7 +696,7 @@ impl<I2C, D> Bme680<I2C, D>
 
     fn get_calib_data<I2CX>(
         i2c: &mut I2CX,
-        dev_id: I2CAddress,
+        dev_id: Address,
     ) -> Result<CalibrationData, Bme680Error>
         where
             I2CX: I2c,
