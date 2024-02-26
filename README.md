@@ -10,7 +10,7 @@ To use this library, create a new project and add it as a dependency:
 
 ```toml
 [dependencies]
-bme680 = {git = "https://github.com/dnutiu/bme680-rust.git", version = "0.7.0"}
+bme680 = {git = "https://github.com/dnutiu/bme680-rust.git", version = "0.8.0"}
 ```
 
 # Alternative
