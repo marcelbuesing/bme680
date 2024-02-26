@@ -77,13 +77,13 @@ use crate::hal::delay::DelayNs;
 use crate::hal::i2c::I2c;
 
 use core::time::Duration;
-use core::{marker::PhantomData, result};
+use core::{marker::PhantomData};
 use embedded_hal as hal;
-use embedded_hal::i2c::ErrorType;
 use log::{debug, error, info};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
+use crate::Bme680Error::{I2CRead, I2CWrite};
 
 /// BME680 General config
 pub const BME680_POLL_PERIOD_MS: u8 = 10;
@@ -150,12 +150,12 @@ const BME680_REG_BUFFER_LENGTH: usize = 6;
 
 /// All possible errors in this crate
 #[derive(Debug)]
-pub enum Error<E> {
+pub enum Bme680Error {
     ///
     /// aka BME680_E_COM_FAIL
     ///
-    I2CWrite(E),
-    I2CRead(E),
+    I2CWrite,
+    I2CRead,
     Delay,
     ///
     /// aka BME680_E_DEV_NOT_FOUND
@@ -179,9 +179,6 @@ pub enum Error<E> {
     BoundaryCheckFailure(&'static str),
 }
 
-/// Abbreviates `std::result::Result` type
-pub type Result<T, E> = result::Result<T, Error<E>>;
-
 ///
 /// Power mode settings
 ///
@@ -192,7 +189,6 @@ pub enum PowerMode {
 }
 
 impl PowerMode {
-    // TODO replace with TryFrom once stabilized
     fn from(power_mode: u8) -> Self {
         match power_mode {
             BME680_SLEEP_MODE => PowerMode::SleepMode,
@@ -243,7 +239,7 @@ impl Default for I2CAddress {
     }
 }
 
-/// Calibration data used during initalization
+/// Calibration data used during initialization
 #[derive(Debug, Default, Copy)]
 #[repr(C)]
 pub struct CalibrationData {
@@ -358,17 +354,17 @@ impl I2CUtil {
         i2c: &mut I2C,
         dev_id: u8,
         reg_addr: u8,
-    ) -> Result<u8, <I2C as ErrorType>::Error>
+    ) -> Result<u8, Bme680Error>
         where
             I2C: I2c
     {
         let mut buf = [0; 1];
 
-        i2c.write(dev_id, &[reg_addr]).map_err(Error::I2CWrite)?;
+        i2c.write(dev_id, &[reg_addr]).map_err(|_e| { I2CWrite })?;
 
         match i2c.read(dev_id, &mut buf) {
             Ok(()) => Ok(buf[0]),
-            Err(e) => Err(Error::I2CRead(e)),
+            Err(_e) => Err(I2CRead),
         }
     }
 
@@ -377,15 +373,15 @@ impl I2CUtil {
         dev_id: u8,
         reg_addr: u8,
         buf: &mut [u8],
-    ) -> Result<(), <I2C as ErrorType>::Error>
+    ) -> Result<(), Bme680Error>
         where
             I2C: I2c,
     {
-        i2c.write(dev_id, &[reg_addr]).map_err(Error::I2CWrite)?;
+        i2c.write(dev_id, &[reg_addr]).map_err(|_e| { Bme680Error::I2CWrite })?;
 
         match i2c.read(dev_id, buf) {
             Ok(()) => Ok(()),
-            Err(e) => Err(Error::I2CRead(e)),
+            Err(_e) => Err(I2CRead),
         }
     }
 }
@@ -410,22 +406,22 @@ fn boundary_check<I2C>(
     value_name: &'static str,
     min: u8,
     max: u8,
-) -> Result<u8, <I2C as ErrorType>::Error>
+) -> Result<u8, Bme680Error<>>
     where
         I2C: I2c,
 {
-    let value = value.ok_or(Error::BoundaryCheckFailure(value_name))?;
+    let value = value.ok_or(Bme680Error::BoundaryCheckFailure(value_name))?;
 
     if value < min {
         const MIN: &str = "Boundary check failure, value exceeds maximum";
         error!("{}, value name: {}", MIN, value_name);
-        return Err(Error::BoundaryCheckFailure(MIN));
+        return Err(Bme680Error::BoundaryCheckFailure(MIN));
     }
 
     if value > max {
         const MAX: &str = "Boundary check, value exceeds minimum";
         error!("{}, value name: {}", MAX, value_name);
-        return Err(Error::BoundaryCheckFailure(MAX));
+        return Err(Bme680Error::BoundaryCheckFailure(MAX));
     }
     Ok(value)
 }
@@ -439,11 +435,10 @@ impl<I2C, D> Bme680<I2C, D>
         i2c: &mut I2C,
         delay: &mut D,
         dev_id: I2CAddress,
-    ) -> Result<(), <I2C as ErrorType>::Error> {
+    ) -> Result<(), Bme680Error> {
         let tmp_buff: [u8; 2] = [BME680_SOFT_RESET_ADDR, BME680_SOFT_RESET_CMD];
 
-        i2c.write(dev_id.addr(), &tmp_buff)
-            .map_err(Error::I2CWrite)?;
+        i2c.write(dev_id.addr(), &tmp_buff).map_err(|_e| { Bme680Error::I2CWrite })?;
 
         delay.delay_ms(BME680_RESET_PERIOD as u32);
         Ok(())
@@ -453,7 +448,7 @@ impl<I2C, D> Bme680<I2C, D>
         mut i2c: I2C,
         delay: &mut D,
         dev_id: I2CAddress,
-    ) -> Result<Bme680<I2C, D>, <I2C as ErrorType>::Error> {
+    ) -> Result<Bme680<I2C, D>, Bme680Error> {
         Bme680::soft_reset(&mut i2c, delay, dev_id)?;
 
         debug!("Reading chip id");
@@ -478,16 +473,16 @@ impl<I2C, D> Bme680<I2C, D>
             Ok(dev)
         } else {
             error!("Device does not match chip id {}", BME680_CHIP_ID);
-            Err(Error::DeviceNotFound)
+            Err(Bme680Error::DeviceNotFound)
         }
     }
 
     fn bme680_set_regs(
         &mut self,
         reg: &[(u8, u8)],
-    ) -> Result<(), <I2C as ErrorType>::Error> {
+    ) -> Result<(), Bme680Error> {
         if reg.is_empty() || reg.len() > (BME680_TMP_BUFFER_LENGTH / 2) as usize {
-            return Err(Error::InvalidLength);
+            return Err(Bme680Error::InvalidLength);
         }
 
         for (reg_addr, reg_data) in reg {
@@ -498,7 +493,7 @@ impl<I2C, D> Bme680<I2C, D>
             );
             self.i2c
                 .write(self.dev_id.addr(), &tmp_buff)
-                .map_err(Error::I2CWrite)?;
+                .map_err(|_e| { I2CWrite })?;
         }
 
         Ok(())
@@ -509,7 +504,7 @@ impl<I2C, D> Bme680<I2C, D>
         &mut self,
         delay: &mut D,
         settings: Settings,
-    ) -> Result<(), <I2C as ErrorType>::Error> {
+    ) -> Result<(), Bme680Error> {
         let (sensor_settings, desired_settings) = settings;
         let tph_sett = sensor_settings.tph_sett;
         let gas_sett = sensor_settings.gas_sett;
@@ -636,7 +631,7 @@ impl<I2C, D> Bme680<I2C, D>
     pub fn get_sensor_settings(
         &mut self,
         desired_settings: DesiredSensorSettings,
-    ) -> Result<SensorSettings, <I2C as ErrorType>::Error> {
+    ) -> Result<SensorSettings, Bme680Error> {
         let reg_addr: u8 = 0x70u8;
         let mut data_array: [u8; BME680_REG_BUFFER_LENGTH] = [0; BME680_REG_BUFFER_LENGTH];
         let mut sensor_settings: SensorSettings = Default::default();
@@ -692,7 +687,7 @@ impl<I2C, D> Bme680<I2C, D>
         &mut self,
         delay: &mut D,
         target_power_mode: PowerMode,
-    ) -> Result<(), <I2C as ErrorType>::Error> {
+    ) -> Result<(), Bme680Error> {
         let mut tmp_pow_mode: u8;
         let mut current_power_mode: PowerMode;
 
@@ -714,7 +709,6 @@ impl<I2C, D> Bme680<I2C, D>
                 delay
                     .delay_ms(BME680_POLL_PERIOD_MS as u32);
             } else {
-                // TODO do while in Rust?
                 break;
             }
         }
@@ -731,7 +725,7 @@ impl<I2C, D> Bme680<I2C, D>
     /// Retrieve current sensor power mode via registers
     pub fn get_sensor_mode(
         &mut self,
-    ) -> Result<PowerMode, <I2C as ErrorType>::Error> {
+    ) -> Result<PowerMode, Bme680Error> {
         let regs =
             I2CUtil::read_byte(&mut self.i2c, self.dev_id.addr(), BME680_CONF_T_P_MODE_ADDR)?;
         let mode = regs & BME680_MODE_MSK;
@@ -740,8 +734,6 @@ impl<I2C, D> Bme680<I2C, D>
 
     pub fn bme680_set_profile_dur(&mut self, tph_sett: TphSett, duration: Duration) {
         let os_to_meas_cycles: [u8; 6] = [0u8, 1u8, 2u8, 4u8, 8u8, 16u8];
-        // TODO check if the following unwrap_ors do not change behaviour
-        // TODO replace once https://github.com/rust-lang/rust/pull/50167 has been merged
         const MILLIS_PER_SEC: u64 = 1_000;
         const NANOS_PER_MILLI: u64 = 1_000_000;
         let millis = (duration.as_secs() as u64 * MILLIS_PER_SEC)
@@ -770,9 +762,8 @@ impl<I2C, D> Bme680<I2C, D>
     pub fn get_profile_dur(
         &self,
         sensor_settings: &SensorSettings,
-    ) -> Result<Duration, <I2C as ErrorType>::Error> {
+    ) -> Result<Duration, Bme680Error> {
         let os_to_meas_cycles: [u8; 6] = [0u8, 1u8, 2u8, 4u8, 8u8, 16u8];
-        // TODO check if the following unwrap_ors do not change behaviour
         let mut meas_cycles = os_to_meas_cycles[sensor_settings
             .tph_sett
             .os_temp
@@ -806,7 +797,7 @@ impl<I2C, D> Bme680<I2C, D>
     fn get_calib_data<I2CX>(
         i2c: &mut I2CX,
         dev_id: I2CAddress,
-    ) -> Result<CalibrationData, <I2C as ErrorType>::Error>
+    ) -> Result<CalibrationData, Bme680Error>
         where
             I2CX: I2c,
     {
@@ -820,7 +811,7 @@ impl<I2C, D> Bme680<I2C, D>
             dev_id.addr(),
             BME680_COEFF_ADDR1,
             &mut coeff_array[0..(BME680_COEFF_ADDR1_LEN - 1)],
-        ).unwrap();
+        ).map_err(|_e| { I2CRead })?;
 
         I2CUtil::read_bytes::<I2CX>(
             i2c,
@@ -828,7 +819,7 @@ impl<I2C, D> Bme680<I2C, D>
             BME680_COEFF_ADDR2,
             &mut coeff_array
                 [BME680_COEFF_ADDR1_LEN..(BME680_COEFF_ADDR1_LEN + BME680_COEFF_ADDR2_LEN - 1)],
-        ).unwrap();
+        ).map_err(|_e| { I2CRead })?;
 
         calib.par_t1 = ((coeff_array[34usize] as i32) << 8i32 | coeff_array[33usize] as i32) as u16;
         calib.par_t2 = ((coeff_array[2usize] as i32) << 8i32 | coeff_array[1usize] as i32) as i16;
@@ -858,17 +849,16 @@ impl<I2C, D> Bme680<I2C, D>
         calib.par_gh3 = coeff_array[38usize] as i8;
 
         calib.res_heat_range =
-            (I2CUtil::read_byte::<I2CX>(i2c, dev_id.addr(), BME680_ADDR_RES_HEAT_RANGE_ADDR).unwrap()
-                & 0x30)
-                / 16;
+            (I2CUtil::read_byte::<I2CX>(i2c, dev_id.addr(), BME680_ADDR_RES_HEAT_RANGE_ADDR)
+                .map_err(|_e| { I2CRead })? & 0x30) / 16;
 
         calib.res_heat_val =
-            I2CUtil::read_byte::<I2CX>(i2c, dev_id.addr(), BME680_ADDR_RES_HEAT_VAL_ADDR).unwrap() as i8;
+            I2CUtil::read_byte::<I2CX>(i2c, dev_id.addr(), BME680_ADDR_RES_HEAT_VAL_ADDR)
+                .map_err(|_e| { I2CRead })? as i8;
 
         calib.range_sw_err =
-            (I2CUtil::read_byte::<I2CX>(i2c, dev_id.addr(), BME680_ADDR_RANGE_SW_ERR_ADDR).unwrap()
-                & BME680_RSERROR_MSK)
-                / 16;
+            (I2CUtil::read_byte::<I2CX>(i2c, dev_id.addr(), BME680_ADDR_RANGE_SW_ERR_ADDR)
+                .map_err(|_e| { I2CRead })? & BME680_RSERROR_MSK) / 16;
 
         Ok(calib)
     }
@@ -876,12 +866,11 @@ impl<I2C, D> Bme680<I2C, D>
     fn set_gas_config(
         &mut self,
         gas_sett: GasSett,
-    ) -> Result<(), <I2C as ErrorType>::Error> {
+    ) -> Result<(), Bme680Error> {
         if self.power_mode != PowerMode::ForcedMode {
-            return Err(Error::DefinePwrMode);
+            return Err(Bme680Error::DefinePwrMode);
         }
 
-        // TODO check whether unwrap_or changes behaviour
         let reg: [(u8, u8); 2] = [
             (
                 BME680_RES_HEAT0_ADDR,
@@ -901,7 +890,7 @@ impl<I2C, D> Bme680<I2C, D>
         self.bme680_set_regs(&reg)
     }
 
-    fn get_gas_config(&mut self) -> Result<GasSett, <I2C as ErrorType>::Error> {
+    fn get_gas_config(&mut self) -> Result<GasSett, Bme680Error> {
         let heatr_temp = Some(I2CUtil::read_byte(
             &mut self.i2c,
             self.dev_id.addr(),
@@ -927,7 +916,7 @@ impl<I2C, D> Bme680<I2C, D>
     pub fn get_sensor_data(
         &mut self,
         delay: &mut D,
-    ) -> Result<(FieldData, FieldDataCondition), <I2C as ErrorType>::Error> {
+    ) -> Result<(FieldData, FieldDataCondition), Bme680Error> {
         let mut buff: [u8; BME680_FIELD_LENGTH] = [0; BME680_FIELD_LENGTH];
 
         debug!("Buf {:?}, len: {}", buff, buff.len());
