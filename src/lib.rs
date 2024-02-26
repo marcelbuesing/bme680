@@ -6,7 +6,7 @@
 //! ```no_run
 
 
-//! use bme680::{Bme680, Error, I2CAddress, IIRFilterSize, OversamplingSetting, PowerMode, SettingsBuilder};
+//! use bme680::{Bme680, Bme680Error, I2CAddress, IIRFilterSize, OversamplingSetting, PowerMode, SettingsBuilder};
 //! use core::result;
 //! use core::time::Duration;
 //! use embedded_hal::delay::DelayNs;
@@ -15,7 +15,7 @@
 //! use log::info;
 //!
 //! // Please export RUST_LOG=info in order to see logs in the console.
-//! fn main() -> result::Result<(), Error<I2CError>>
+//! fn main() -> result::Result<(), Bme680Error>
 //! {
 //!     env_logger::init();
 //!
