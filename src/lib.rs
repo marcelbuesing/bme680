@@ -67,6 +67,7 @@ pub use self::settings::{
     DesiredSensorSettings, GasSettings, IIRFilterSize, OversamplingSetting, SensorSettings,
     Settings, SettingsBuilder, TemperatureSettings,
 };
+use core::cell::RefCell;
 
 mod calculation;
 pub mod i2c;
@@ -77,11 +78,12 @@ use crate::hal::delay::DelayNs;
 use crate::hal::i2c::I2c;
 
 use core::marker::PhantomData;
+use core::ops::DerefMut;
 use core::time::Duration;
 use embedded_hal as hal;
 use log::{debug, error, info};
 
-use crate::Bme680Error::{I2CRead, I2CWrite};
+use crate::Bme680Error::I2CRead;
 use i2c::{Address, I2CUtility};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -321,7 +323,7 @@ pub enum FieldDataCondition {
 /// Driver for the BME680 environmental sensor
 #[repr(C)]
 pub struct Bme680<I2C, D> {
-    i2c_bus_handle: I2C,
+    i2c_bus_handle: RefCell<I2C>,
     delay: PhantomData<D>,
     device_address: Address,
     calibration_data: CalibrationData,
@@ -398,7 +400,7 @@ where
                 Bme680::<I2C, D>::get_calib_data::<I2C>(&mut i2c_handle, device_address)?;
             debug!("Calibration data {:?}", calibration_data);
             let device = Bme680 {
-                i2c_bus_handle: i2c_handle,
+                i2c_bus_handle: RefCell::new(i2c_handle),
                 delay: PhantomData,
                 device_address,
                 calibration_data,
@@ -425,9 +427,12 @@ where
                 "Setting register reg: {:?} buffer: {:?}",
                 register_address, buffer
             );
-            self.i2c_bus_handle
-                .write(self.device_address.addr(), &buffer)
-                .map_err(|_e| I2CWrite)?;
+
+            I2CUtility::write_bytes(
+                self.i2c_bus_handle.borrow_mut().deref_mut(),
+                self.device_address.addr(),
+                &buffer,
+            )?;
         }
 
         Ok(())
@@ -463,7 +468,7 @@ where
         // Selecting the filter
         if desired_settings.contains(DesiredSensorSettings::FILTER_SIZE_SEL) {
             let mut data = I2CUtility::read_byte(
-                &mut self.i2c_bus_handle,
+                self.i2c_bus_handle.borrow_mut().deref_mut(),
                 self.device_address.addr(),
                 BME680_CONF_ODR_FILT_ADDR,
             )?;
@@ -481,7 +486,7 @@ where
             let gas_sett_heatr_ctrl =
                 boundary_check_u8(gas_sett.heater_control, "GasSett.heatr_ctrl", 0x0u8, 0x8u8)?;
             let mut data = I2CUtility::read_byte(
-                &mut self.i2c_bus_handle,
+                self.i2c_bus_handle.borrow_mut().deref_mut(),
                 self.device_address.addr(),
                 BME680_CONF_HEAT_CTRL_ADDR,
             )?;
@@ -495,7 +500,7 @@ where
             .contains(DesiredSensorSettings::OST_SEL | DesiredSensorSettings::OSP_SEL)
         {
             let mut data = I2CUtility::read_byte(
-                &mut self.i2c_bus_handle,
+                self.i2c_bus_handle.borrow_mut().deref_mut(),
                 self.device_address.addr(),
                 BME680_CONF_T_P_MODE_ADDR,
             )?;
@@ -532,7 +537,7 @@ where
                 5,
             )?;
             let mut data = I2CUtility::read_byte(
-                &mut self.i2c_bus_handle,
+                self.i2c_bus_handle.borrow_mut().deref_mut(),
                 self.device_address.addr(),
                 BME680_CONF_OS_H_ADDR,
             )?;
@@ -546,7 +551,7 @@ where
             .contains(DesiredSensorSettings::RUN_GAS_SEL | DesiredSensorSettings::NBCONV_SEL)
         {
             let mut data = I2CUtility::read_byte(
-                &mut self.i2c_bus_handle,
+                self.i2c_bus_handle.borrow_mut().deref_mut(),
                 self.device_address.addr(),
                 BME680_CONF_ODR_RUN_GAS_NBC_ADDR,
             )?;
@@ -590,7 +595,7 @@ where
         let mut sensor_settings: SensorSettings = Default::default();
 
         I2CUtility::read_bytes(
-            &mut self.i2c_bus_handle,
+            self.i2c_bus_handle.borrow_mut().deref_mut(),
             self.device_address.addr(),
             reg_addr,
             &mut data_array,
@@ -656,7 +661,7 @@ where
         // Call repeatedly until in sleep
         loop {
             tmp_pow_mode = I2CUtility::read_byte(
-                &mut self.i2c_bus_handle,
+                self.i2c_bus_handle.borrow_mut().deref_mut(),
                 self.device_address.addr(),
                 BME680_CONF_T_P_MODE_ADDR,
             )?;
@@ -689,7 +694,7 @@ where
     /// Retrieve current sensor power mode via registers
     pub fn get_sensor_mode(&mut self) -> Result<PowerMode, Bme680Error> {
         let regs = I2CUtility::read_byte(
-            &mut self.i2c_bus_handle,
+            self.i2c_bus_handle.borrow_mut().deref_mut(),
             self.device_address.addr(),
             BME680_CONF_T_P_MODE_ADDR,
         )?;
@@ -836,13 +841,13 @@ where
 
     fn get_gas_config(&mut self) -> Result<GasSettings, Bme680Error> {
         let heatr_temp = Some(I2CUtility::read_byte(
-            &mut self.i2c_bus_handle,
+            self.i2c_bus_handle.borrow_mut().deref_mut(),
             self.device_address.addr(),
             BME680_ADDR_SENS_CONF_START,
         )? as u16);
 
         let heatr_dur_ms = I2CUtility::read_byte(
-            &mut self.i2c_bus_handle,
+            self.i2c_bus_handle.borrow_mut().deref_mut(),
             self.device_address.addr(),
             BME680_ADDR_GAS_CONF_START,
         )? as u64;
@@ -869,7 +874,7 @@ where
         const TRIES: u8 = 10;
         for _ in 0..TRIES {
             I2CUtility::read_bytes(
-                &mut self.i2c_bus_handle,
+                self.i2c_bus_handle.borrow_mut().deref_mut(),
                 self.device_address.addr(),
                 BME680_FIELD0_ADDR,
                 &mut buff,
