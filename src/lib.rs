@@ -151,6 +151,9 @@ const BME680_TMP_BUFFER_LENGTH: usize = 40;
 const BME680_REG_BUFFER_LENGTH: usize = 6;
 
 /// All possible errors in this crate
+/// TODO: use anyhow:
+/// - https://antoinerr.github.io/blog-website/2023/01/28/rust-anyhow.html
+/// - https://docs.rs/anyhow/latest/anyhow/
 #[derive(Debug)]
 pub enum Bme680Error {
     ///
