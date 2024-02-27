@@ -65,8 +65,8 @@
 #![forbid(unsafe_code)]
 
 pub use self::settings::{
-    DesiredSensorSettings, GasSett, IIRFilterSize, OversamplingSetting, SensorSettings, Settings,
-    SettingsBuilder, TphSett,
+    DesiredSensorSettings, GasSettings, IIRFilterSize, OversamplingSetting, SensorSettings, Settings,
+    SettingsBuilder, TemperatureSettings,
 };
 
 mod calculation;
@@ -433,10 +433,10 @@ impl<I2C: I2c, D: DelayNs> Bme680<I2C, D>
         settings: Settings,
     ) -> Result<(), Bme680Error> {
         let (sensor_settings, desired_settings) = settings;
-        let tph_sett = sensor_settings.tph_sett;
-        let gas_sett = sensor_settings.gas_sett;
+        let tph_sett = sensor_settings.temperature_settings;
+        let gas_sett = sensor_settings.gas_settings;
 
-        self.temperature_offset = sensor_settings.tph_sett.temperature_offset.unwrap_or(0f32);
+        self.temperature_offset = sensor_settings.temperature_settings.temperature_offset.unwrap_or(0f32);
 
         let mut reg: [(u8, u8); BME680_REG_BUFFER_LENGTH] = [(0, 0); BME680_REG_BUFFER_LENGTH];
         let intended_power_mode = self.power_mode;
@@ -451,22 +451,22 @@ impl<I2C: I2c, D: DelayNs> Bme680<I2C, D>
 
         let mut element_index = 0;
         // Selecting the filter
-        if desired_settings.contains(DesiredSensorSettings::FILTER_SEL) {
+        if desired_settings.contains(DesiredSensorSettings::FILTER_SIZE_SEL) {
             let mut data =
                 I2CUtility::read_byte(&mut self.i2c_bus_handle, self.device_address.addr(), BME680_CONF_ODR_FILT_ADDR)?;
 
             debug!("FILTER_SEL: true");
             data = (data as i32 & !0x1ci32
-                | (tph_sett.filter.unwrap_or(IIRFilterSize::Size0) as i32) << 2i32 & 0x1ci32)
+                | (tph_sett.filter_size.unwrap_or(IIRFilterSize::Size0) as i32) << 2i32 & 0x1ci32)
                 as u8;
             reg[element_index] = (BME680_CONF_ODR_FILT_ADDR, data);
             element_index += 1;
         }
 
-        if desired_settings.contains(DesiredSensorSettings::HCNTRL_SEL) {
+        if desired_settings.contains(DesiredSensorSettings::HUMIDITY_CONTROL_SEL) {
             debug!("HCNTRL_SEL: true");
             let gas_sett_heatr_ctrl =
-                boundary_check_u8(gas_sett.heatr_ctrl, "GasSett.heatr_ctrl", 0x0u8, 0x8u8)?;
+                boundary_check_u8(gas_sett.heater_control, "GasSett.heatr_ctrl", 0x0u8, 0x8u8)?;
             let mut data = I2CUtility::read_byte(
                 &mut self.i2c_bus_handle,
                 self.device_address.addr(),
@@ -487,7 +487,7 @@ impl<I2C: I2c, D: DelayNs> Bme680<I2C, D>
             if desired_settings.contains(DesiredSensorSettings::OST_SEL) {
                 debug!("OST_SEL: true");
                 let tph_sett_os_temp = boundary_check_u8(
-                    tph_sett.os_temp.map(|x| x as u8),
+                    tph_sett.temperature_oversampling.map(|x| x as u8),
                     "TphSett.os_temp",
                     0,
                     5,
@@ -497,7 +497,7 @@ impl<I2C: I2c, D: DelayNs> Bme680<I2C, D>
 
             if desired_settings.contains(DesiredSensorSettings::OSP_SEL) {
                 debug!("OSP_SEL: true");
-                let tph_sett_os_pres = tph_sett.os_temp.unwrap_or(OversamplingSetting::OS1x);
+                let tph_sett_os_pres = tph_sett.temperature_oversampling.unwrap_or(OversamplingSetting::OS1x);
                 data = (data as i32 & !0x1ci32 | (tph_sett_os_pres as i32) << 2i32 & 0x1ci32) as u8;
             }
             reg[element_index] = (BME680_CONF_T_P_MODE_ADDR, data);
@@ -508,7 +508,7 @@ impl<I2C: I2c, D: DelayNs> Bme680<I2C, D>
         if desired_settings.contains(DesiredSensorSettings::OSH_SEL) {
             debug!("OSH_SEL: true");
             let tph_sett_os_hum =
-                boundary_check_u8(tph_sett.os_hum.map(|x| x as u8), "TphSett.os_hum", 0, 5)?;
+                boundary_check_u8(tph_sett.humidity_oversampling.map(|x| x as u8), "TphSett.os_hum", 0, 5)?;
             let mut data =
                 I2CUtility::read_byte(&mut self.i2c_bus_handle, self.device_address.addr(), BME680_CONF_OS_H_ADDR)?;
             data = (data as i32 & !0x7i32 | tph_sett_os_hum as i32 & 0x7i32) as u8;
@@ -529,7 +529,7 @@ impl<I2C: I2c, D: DelayNs> Bme680<I2C, D>
             if desired_settings.contains(DesiredSensorSettings::RUN_GAS_SEL) {
                 debug!("RUN_GAS_SEL: true");
                 data = (data as i32 & !0x10i32
-                    | (gas_sett.run_gas_measurement as i32) << 4i32 & 0x10i32)
+                    | (gas_sett.enable_gas_measurement as i32) << 4i32 & 0x10i32)
                     as u8;
             }
 
@@ -567,11 +567,11 @@ impl<I2C: I2c, D: DelayNs> Bme680<I2C, D>
         I2CUtility::read_bytes(&mut self.i2c_bus_handle, self.device_address.addr(), reg_addr, &mut data_array)?;
 
         if desired_settings.contains(DesiredSensorSettings::GAS_MEAS_SEL) {
-            sensor_settings.gas_sett = self.get_gas_config()?;
+            sensor_settings.gas_settings = self.get_gas_config()?;
         }
 
-        if desired_settings.contains(DesiredSensorSettings::FILTER_SEL) {
-            sensor_settings.tph_sett.filter = Some(IIRFilterSize::from_u8(
+        if desired_settings.contains(DesiredSensorSettings::FILTER_SIZE_SEL) {
+            sensor_settings.temperature_settings.filter_size = Some(IIRFilterSize::from_u8(
                 ((data_array[5usize] as i32 & 0x1ci32) >> 2i32) as u8,
             ));
         }
@@ -581,24 +581,24 @@ impl<I2C: I2c, D: DelayNs> Bme680<I2C, D>
         {
             let os_temp: u8 = ((data_array[4usize] as i32 & 0xe0i32) >> 5i32) as u8;
             let os_pres: u8 = ((data_array[4usize] as i32 & 0x1ci32) >> 2i32) as u8;
-            sensor_settings.tph_sett.os_temp = Some(OversamplingSetting::from_u8(os_temp));
-            sensor_settings.tph_sett.os_pres = Some(OversamplingSetting::from_u8(os_pres));
+            sensor_settings.temperature_settings.temperature_oversampling = Some(OversamplingSetting::from_u8(os_temp));
+            sensor_settings.temperature_settings.pressure_oversampling = Some(OversamplingSetting::from_u8(os_pres));
         }
 
         if desired_settings.contains(DesiredSensorSettings::OSH_SEL) {
             let os_hum: u8 = (data_array[2usize] as i32 & 0x7i32) as u8;
-            sensor_settings.tph_sett.os_hum = Some(OversamplingSetting::from_u8(os_hum));
+            sensor_settings.temperature_settings.humidity_oversampling = Some(OversamplingSetting::from_u8(os_hum));
         }
 
-        if desired_settings.contains(DesiredSensorSettings::HCNTRL_SEL) {
-            sensor_settings.gas_sett.heatr_ctrl = Some((data_array[0usize] as i32 & 0x8i32) as u8);
+        if desired_settings.contains(DesiredSensorSettings::HUMIDITY_CONTROL_SEL) {
+            sensor_settings.gas_settings.heater_control = Some((data_array[0usize] as i32 & 0x8i32) as u8);
         }
 
         if desired_settings
             .contains(DesiredSensorSettings::RUN_GAS_SEL | DesiredSensorSettings::NBCONV_SEL)
         {
-            sensor_settings.gas_sett.nb_conv = (data_array[1usize] as i32 & 0xfi32) as u8;
-            sensor_settings.gas_sett.run_gas_measurement =
+            sensor_settings.gas_settings.nb_conv = (data_array[1usize] as i32 & 0xfi32) as u8;
+            sensor_settings.gas_settings.enable_gas_measurement =
                 ((data_array[1usize] as i32 & 0x10i32) >> 4i32) == 0;
         }
 
@@ -665,20 +665,20 @@ impl<I2C: I2c, D: DelayNs> Bme680<I2C, D>
     ) -> Result<Duration, Bme680Error> {
         let os_to_meas_cycles: [u8; 6] = [0u8, 1u8, 2u8, 4u8, 8u8, 16u8];
         let mut meas_cycles = os_to_meas_cycles[sensor_settings
-            .tph_sett
-            .os_temp
+            .temperature_settings
+            .temperature_oversampling
             .unwrap_or(OversamplingSetting::OSNone)
             as usize] as u32;
         meas_cycles = meas_cycles.wrapping_add(
             os_to_meas_cycles[sensor_settings
-                .tph_sett
-                .os_pres
+                .temperature_settings
+                .pressure_oversampling
                 .unwrap_or(OversamplingSetting::OSNone) as usize] as u32,
         );
         meas_cycles = meas_cycles.wrapping_add(
             os_to_meas_cycles[sensor_settings
-                .tph_sett
-                .os_hum
+                .temperature_settings
+                .humidity_oversampling
                 .unwrap_or(OversamplingSetting::OSNone) as usize] as u32,
         );
         let mut tph_dur = meas_cycles.wrapping_mul(1963u32);
@@ -688,8 +688,8 @@ impl<I2C: I2c, D: DelayNs> Bme680<I2C, D>
         tph_dur = tph_dur.wrapping_div(1000u32);
         tph_dur = tph_dur.wrapping_add(1u32);
         let mut duration = Duration::from_millis(tph_dur as u64);
-        if sensor_settings.gas_sett.run_gas_measurement {
-            duration += sensor_settings.gas_sett.heatr_dur.unwrap_or(Duration::default());
+        if sensor_settings.gas_settings.enable_gas_measurement {
+            duration += sensor_settings.gas_settings.heater_duration.unwrap_or(Duration::default());
         }
         Ok(duration)
     }
@@ -765,7 +765,7 @@ impl<I2C: I2c, D: DelayNs> Bme680<I2C, D>
 
     fn set_gas_config(
         &mut self,
-        gas_sett: GasSett,
+        gas_sett: GasSettings,
     ) -> Result<(), Bme680Error> {
         if self.power_mode != PowerMode::ForcedMode {
             return Err(Bme680Error::DefinePwrMode);
@@ -777,19 +777,19 @@ impl<I2C: I2c, D: DelayNs> Bme680<I2C, D>
                 Calculation::heater_resistance(
                     &self.calibration_data,
                     gas_sett.ambient_temperature,
-                    gas_sett.heatr_temp.unwrap_or(0),
+                    gas_sett.heater_temperature.unwrap_or(0),
                 ),
             ),
             (
                 BME680_GAS_WAIT0_ADDR,
-                Calculation::heater_duration(gas_sett.heatr_dur.unwrap_or_else(|| Duration::from_secs(0))),
+                Calculation::heater_duration(gas_sett.heater_duration.unwrap_or_else(|| Duration::from_secs(0))),
             ),
         ];
 
         self.bme680_set_regs(&reg)
     }
 
-    fn get_gas_config(&mut self) -> Result<GasSett, Bme680Error> {
+    fn get_gas_config(&mut self) -> Result<GasSettings, Bme680Error> {
         let heatr_temp = Some(I2CUtility::read_byte(
             &mut self.i2c_bus_handle,
             self.device_address.addr(),
@@ -802,9 +802,9 @@ impl<I2C: I2c, D: DelayNs> Bme680<I2C, D>
             BME680_ADDR_GAS_CONF_START,
         )? as u64;
 
-        let gas_sett = GasSett {
-            heatr_temp,
-            heatr_dur: Some(Duration::from_millis(heatr_dur_ms)),
+        let gas_sett = GasSettings {
+            heater_temperature: heatr_temp,
+            heater_duration: Some(Duration::from_millis(heatr_dur_ms)),
             ..Default::default()
         };
 
