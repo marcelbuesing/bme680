@@ -1,6 +1,6 @@
-use embedded_hal::i2c::I2c;
 use crate::Bme680Error;
 use crate::Bme680Error::{I2CRead, I2CWrite};
+use embedded_hal::i2c::I2c;
 
 ///
 /// Represents the I2C address of the BME680 Sensor.
@@ -40,11 +40,12 @@ impl I2CUtility {
         i2c_handle: &mut I2C,
         device_address: u8,
         register_address: u8,
-    ) -> Result<u8, Bme680Error>
-    {
+    ) -> Result<u8, Bme680Error> {
         let mut buf = [0; 1];
 
-        i2c_handle.write(device_address, &[register_address]).map_err(|_e| { I2CWrite })?;
+        i2c_handle
+            .write(device_address, &[register_address])
+            .map_err(|_e| I2CWrite)?;
 
         match i2c_handle.read(device_address, &mut buf) {
             Ok(()) => Ok(buf[0]),
@@ -58,9 +59,10 @@ impl I2CUtility {
         device_address: u8,
         register_address: u8,
         buffer: &mut [u8],
-    ) -> Result<(), Bme680Error>
-    {
-        i2c_handle.write(device_address, &[register_address]).map_err(|_e| { I2CWrite })?;
+    ) -> Result<(), Bme680Error> {
+        i2c_handle
+            .write(device_address, &[register_address])
+            .map_err(|_e| I2CWrite)?;
 
         match i2c_handle.read(device_address, buffer) {
             Ok(()) => Ok(()),
@@ -69,7 +71,13 @@ impl I2CUtility {
     }
 
     /// Writes bytes to the I2C bus.
-    pub fn write_bytes<I2C: I2c>(i2c_handle: &mut I2C, device_address: u8, buffer: &[u8]) -> Result<(), Bme680Error> {
-        i2c_handle.write(device_address, &buffer).map_err(|_e| { I2CWrite })
+    pub fn write_bytes<I2C: I2c>(
+        i2c_handle: &mut I2C,
+        device_address: u8,
+        buffer: &[u8],
+    ) -> Result<(), Bme680Error> {
+        i2c_handle
+            .write(device_address, &buffer)
+            .map_err(|_e| I2CWrite)
     }
 }

@@ -9,14 +9,23 @@ impl Calculation {
     /// * `calibration_data` - The calibration data of the sensor.
     /// * `ambient_temperature` - The ambient temperature.
     /// * `heater_temperature` - The heater temperature.
-    pub fn heater_resistance(calibration_data: &CalibrationData, ambient_temperature: i8, heater_temperature: u16) -> u8 {
+    pub fn heater_resistance(
+        calibration_data: &CalibrationData,
+        ambient_temperature: i8,
+        heater_temperature: u16,
+    ) -> u8 {
         // cap temperature
-        let temp = if heater_temperature <= 400 { heater_temperature } else { 400 };
+        let temp = if heater_temperature <= 400 {
+            heater_temperature
+        } else {
+            400
+        };
 
         let var1 = ambient_temperature as i32 * calibration_data.par_gh3 as i32 / 1000i32 * 256i32;
         let var2 = (calibration_data.par_gh1 as i32 + 784i32)
-            * (((calibration_data.par_gh2 as i32 + 154009i32) * temp as i32 * 5i32 / 100i32 + 3276800i32)
-            / 10i32);
+            * (((calibration_data.par_gh2 as i32 + 154009i32) * temp as i32 * 5i32 / 100i32
+                + 3276800i32)
+                / 10i32);
         let var3 = var1 + var2 / 2i32;
         let var4 = var3 / (calibration_data.res_heat_range as i32 + 4i32);
         let var5 = 131i32 * calibration_data.res_heat_val as i32 + 65536i32;
@@ -81,10 +90,12 @@ impl Calculation {
     /// * `pressure_adc` - The pressure value as returned by the analog to digital converter.
     pub fn pressure(calibration_data: &CalibrationData, t_fine: i32, pressure_adc: u32) -> u32 {
         let mut var1: i32 = (t_fine >> 1) - 64000;
-        let mut var2: i32 = ((((var1 >> 2) * (var1 >> 2)) >> 11) * calibration_data.par_p6 as i32) >> 2;
+        let mut var2: i32 =
+            ((((var1 >> 2) * (var1 >> 2)) >> 11) * calibration_data.par_p6 as i32) >> 2;
         var2 += (var1 * (calibration_data.par_p5 as i32)) << 1;
         var2 = (var2 >> 2i32) + ((calibration_data.par_p4 as i32) << 16i32);
-        var1 = (((((var1 >> 2i32) * (var1 >> 2i32)) >> 13i32) * ((calibration_data.par_p3 as i32) << 5i32))
+        var1 = (((((var1 >> 2i32) * (var1 >> 2i32)) >> 13i32)
+            * ((calibration_data.par_p3 as i32) << 5i32))
             >> 3i32)
             + ((calibration_data.par_p2 as i32 * var1) >> 1i32);
         var1 >>= 18i32;
@@ -120,8 +131,10 @@ impl Calculation {
             - ((temp_scaled * calibration_data.par_h3 as i32 / 100i32) >> 1i32);
         let var2: i32 = (calibration_data.par_h2 as i32
             * (temp_scaled * calibration_data.par_h4 as i32 / 100i32
-            + ((temp_scaled * (temp_scaled * calibration_data.par_h5 as i32 / 100i32)) >> 6i32) / 100i32
-            + (1i32 << 14i32)))
+                + ((temp_scaled * (temp_scaled * calibration_data.par_h5 as i32 / 100i32))
+                    >> 6i32)
+                    / 100i32
+                + (1i32 << 14i32)))
             >> 10i32;
         let var3: i32 = var1 * var2;
         let var4: i32 = (calibration_data.par_h6 as i32) << 7i32;
@@ -141,7 +154,11 @@ impl Calculation {
     ///
     /// * `gas_resistance_adc` - The gas resistance reading from the analog to digital converter.
     /// * `gas_range` - The lookup table gas range.
-    pub fn gas_resistance(calibration_data: &CalibrationData, gas_resistance_adc: u16, gas_range: u8) -> u32 {
+    pub fn gas_resistance(
+        calibration_data: &CalibrationData,
+        gas_resistance_adc: u16,
+        gas_range: u8,
+    ) -> u32 {
         let lookup_table1: [u32; 16] = [
             2147483647u32,
             2147483647u32,

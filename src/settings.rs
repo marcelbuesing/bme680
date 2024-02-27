@@ -195,21 +195,33 @@ impl SettingsBuilder {
         mut self,
         temperature_oversampling: OversamplingSetting,
     ) -> SettingsBuilder {
-        self.sensor_settings.temperature_settings.temperature_oversampling = Some(temperature_oversampling);
+        self.sensor_settings
+            .temperature_settings
+            .temperature_oversampling = Some(temperature_oversampling);
         self.desired_settings |= DesiredSensorSettings::OST_SEL;
         self
     }
 
     /// With pressure oversampling.
-    pub fn with_pressure_oversampling(mut self, pressure_oversampling: OversamplingSetting) -> SettingsBuilder {
-        self.sensor_settings.temperature_settings.pressure_oversampling = Some(pressure_oversampling);
+    pub fn with_pressure_oversampling(
+        mut self,
+        pressure_oversampling: OversamplingSetting,
+    ) -> SettingsBuilder {
+        self.sensor_settings
+            .temperature_settings
+            .pressure_oversampling = Some(pressure_oversampling);
         self.desired_settings |= DesiredSensorSettings::OSP_SEL;
         self
     }
 
     /// With humidity oversampling.
-    pub fn with_humidity_oversampling(mut self, humidity_oversampling: OversamplingSetting) -> SettingsBuilder {
-        self.sensor_settings.temperature_settings.humidity_oversampling = Some(humidity_oversampling);
+    pub fn with_humidity_oversampling(
+        mut self,
+        humidity_oversampling: OversamplingSetting,
+    ) -> SettingsBuilder {
+        self.sensor_settings
+            .temperature_settings
+            .humidity_oversampling = Some(humidity_oversampling);
         self.desired_settings |= DesiredSensorSettings::OSH_SEL;
         self
     }

@@ -1,17 +1,15 @@
 #![no_std]
 
+use bme680::i2c::Address;
 use bme680::{Bme680, Bme680Error, IIRFilterSize, OversamplingSetting, PowerMode, SettingsBuilder};
 use core::time::Duration;
 use embedded_hal::delay::DelayNs;
 use linux_embedded_hal as hal;
 use linux_embedded_hal::Delay;
 use log::info;
-use bme680::i2c::Address;
-
 
 // Please export RUST_LOG=info in order to see logs in the console.
-fn main() -> Result<(), Bme680Error>
-{
+fn main() -> Result<(), Bme680Error> {
     env_logger::init();
 
     let i2c = hal::I2cdev::new("/dev/i2c-1").unwrap();
