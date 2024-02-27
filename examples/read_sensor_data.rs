@@ -23,8 +23,7 @@ fn main() -> Result<(), Bme680Error> {
         .with_pressure_oversampling(OversamplingSetting::OS4x)
         .with_temperature_oversampling(OversamplingSetting::OS8x)
         .with_temperature_filter(IIRFilterSize::Size3)
-        .with_gas_measurement(Duration::from_millis(1500), 320, 25)
-        .with_temperature_offset(-2.2)
+        .with_gas_measurement(Duration::from_millis(1500), 320, 23)
         .with_run_gas(true)
         .build();
 
