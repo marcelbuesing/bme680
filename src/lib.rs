@@ -202,6 +202,7 @@ impl PowerMode {
         }
     }
 
+    /// Retrieves the power mode value.
     fn value(&self) -> u8 {
         match self {
             PowerMode::SleepMode => BME680_SLEEP_MODE,
@@ -364,65 +365,68 @@ impl<I2C: I2c, D: DelayNs> Bme680<I2C, D>
         D: DelayNs,
         I2C: I2c,
 {
+    /// Sends the soft reset command to the chip.
     pub fn soft_reset(
-        i2c: &mut I2C,
+        i2c_handle: &mut I2C,
         delay: &mut D,
-        dev_id: Address,
+        device_address: Address,
     ) -> Result<(), Bme680Error> {
         let tmp_buff: [u8; 2] = [BME680_SOFT_RESET_ADDR, BME680_SOFT_RESET_CMD];
-        I2CUtility::write_bytes(i2c, dev_id.addr(), &tmp_buff)?;
+        I2CUtility::write_bytes(i2c_handle, device_address.addr(), &tmp_buff)?;
         delay.delay_ms(BME680_RESET_PERIOD as u32);
         Ok(())
     }
 
+    /// Initializes the BME680 sensor with an I2C handle.
     pub fn init(
-        mut i2c: I2C,
+        mut i2c_handle: I2C,
         delay: &mut D,
-        dev_id: Address,
+        device_address: Address,
     ) -> Result<Bme680<I2C, D>, Bme680Error> {
-        Bme680::soft_reset(&mut i2c, delay, dev_id)?;
+        Bme680::soft_reset(&mut i2c_handle, delay, device_address)?;
 
         debug!("Reading chip id");
         /* Soft reset to restore it to default values*/
-        let chip_id = I2CUtility::read_byte::<I2C>(&mut i2c, dev_id.addr(), BME680_CHIP_ID_ADDR)?;
+        let chip_id = I2CUtility::read_byte::<I2C>(&mut i2c_handle, device_address.addr(), BME680_CHIP_ID_ADDR)?;
         debug!("Chip id: {}", chip_id);
 
         if chip_id == BME680_CHIP_ID {
             debug!("Reading calibration data");
-            let calibration = Bme680::<I2C, D>::get_calib_data::<I2C>(&mut i2c, dev_id)?;
-            debug!("Calibration data {:?}", calibration);
-            let dev = Bme680 {
-                i2c_bus_handle: i2c,
+            let calibration_data = Bme680::<I2C, D>::get_calib_data::<I2C>(&mut i2c_handle, device_address)?;
+            debug!("Calibration data {:?}", calibration_data);
+            let device = Bme680 {
+                i2c_bus_handle: i2c_handle,
                 delay: PhantomData,
-                device_address: dev_id,
-                calibration_data: calibration,
+                device_address,
+                calibration_data,
                 temperature_offset: 0.0,
                 power_mode: PowerMode::ForcedMode,
             };
             info!("Finished device init");
-            Ok(dev)
+            Ok(device)
         } else {
             error!("Device does not match chip id {}", BME680_CHIP_ID);
             Err(Bme680Error::DeviceNotFound)
         }
     }
 
-    fn bme680_set_regs(
+    /// Sets the sensor registers.
+    fn bme680_set_registers(
         &mut self,
-        reg: &[(u8, u8)],
+        registers: &[(u8, u8)],
     ) -> Result<(), Bme680Error> {
-        if reg.is_empty() || reg.len() > (BME680_TMP_BUFFER_LENGTH / 2) as usize {
+        if registers.is_empty() || registers.len() > (BME680_TMP_BUFFER_LENGTH / 2) as usize {
             return Err(Bme680Error::InvalidLength);
         }
 
-        for (reg_addr, reg_data) in reg {
-            let tmp_buff: [u8; 2] = [*reg_addr, *reg_data];
+        for (register_address, register_data) in registers {
+            let buffer: [u8; 2] = [*register_address, *register_data];
             debug!(
-                "Setting register reg: {:?} tmp_buf: {:?}",
-                reg_addr, tmp_buff
+                "Setting register reg: {:?} buffer: {:?}",
+                register_address, buffer
             );
             self.i2c_bus_handle
-                .write(self.device_address.addr(), &tmp_buff)
+                .write(self.device_address.addr(), &buffer)
                 .map_err(|_e| { I2CWrite })?;
         }
 
@@ -547,7 +551,7 @@ impl<I2C: I2c, D: DelayNs> Bme680<I2C, D>
             element_index += 1;
         }
 
-        self.bme680_set_regs(&reg[0..element_index])?;
+        self.bme680_set_registers(&reg[0..element_index])?;
 
         // Restore previous intended power mode
         self.power_mode = intended_power_mode;
@@ -635,7 +639,7 @@ impl<I2C: I2c, D: DelayNs> Bme680<I2C, D>
                 // Set to sleep
                 tmp_pow_mode &= !BME680_MODE_MSK;
                 debug!("Setting to sleep tmp_pow_mode: {}", tmp_pow_mode);
-                self.bme680_set_regs(&[(BME680_CONF_T_P_MODE_ADDR, tmp_pow_mode)])?;
+                self.bme680_set_registers(&[(BME680_CONF_T_P_MODE_ADDR, tmp_pow_mode)])?;
                 delay
                     .delay_ms(BME680_POLL_PERIOD_MS as u32);
             } else {
@@ -647,7 +651,7 @@ impl<I2C: I2c, D: DelayNs> Bme680<I2C, D>
         if target_power_mode != PowerMode::SleepMode {
             tmp_pow_mode = tmp_pow_mode & !BME680_MODE_MSK | target_power_mode.value();
             debug!("Already in sleep Target power mode: {}", tmp_pow_mode);
-            self.bme680_set_regs(&[(BME680_CONF_T_P_MODE_ADDR, tmp_pow_mode)])?;
+            self.bme680_set_registers(&[(BME680_CONF_T_P_MODE_ADDR, tmp_pow_mode)])?;
         }
         Ok(())
     }
@@ -789,7 +793,7 @@ impl<I2C: I2c, D: DelayNs> Bme680<I2C, D>
             ),
         ];
 
-        self.bme680_set_regs(&reg)
+        self.bme680_set_registers(&reg)
     }
 
     fn get_gas_config(&mut self) -> Result<GasSettings, Bme680Error> {
