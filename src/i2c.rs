@@ -5,9 +5,10 @@ use embedded_hal::i2c::I2c;
 ///
 /// Represents the I2C address of the BME680 Sensor.
 ///
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum Address {
     /// Primary Address 0x76
+    #[default]
     Primary,
     /// Secondary Address 0x77
     Secondary,
@@ -22,12 +23,6 @@ impl Address {
             Address::Secondary => 0x77u8,
             Address::Other(addr) => *addr,
         }
-    }
-}
-
-impl Default for Address {
-    fn default() -> Address {
-        Address::Primary
     }
 }
 
@@ -77,7 +72,7 @@ impl I2CUtility {
         buffer: &[u8],
     ) -> Result<(), Bme680Error> {
         i2c_handle
-            .write(device_address, &buffer)
+            .write(device_address, buffer)
             .map_err(|_e| I2CWrite)
     }
 }

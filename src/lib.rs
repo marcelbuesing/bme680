@@ -415,7 +415,7 @@ where
 
     /// Sets the sensor registers.
     fn bme680_set_registers(&mut self, registers: &[(u8, u8)]) -> Result<(), Bme680Error> {
-        if registers.is_empty() || registers.len() > (BME680_TMP_BUFFER_LENGTH / 2) as usize {
+        if registers.is_empty() || registers.len() > (BME680_TMP_BUFFER_LENGTH / 2) {
             return Err(Bme680Error::InvalidLength);
         }
 
@@ -730,7 +730,7 @@ where
             duration += sensor_settings
                 .gas_settings
                 .heater_duration
-                .unwrap_or(Duration::default());
+                .unwrap_or_default();
         }
         Ok(duration)
     }

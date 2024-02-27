@@ -39,7 +39,7 @@ impl Calculation {
         let mut factor: u8 = 0u8;
         const MILLIS_PER_SEC: u64 = 1_000;
         const NANOS_PER_MILLI: u64 = 1_000_000;
-        let mut dur = (duration.as_secs() as u64 * MILLIS_PER_SEC)
+        let mut dur = (duration.as_secs() * MILLIS_PER_SEC)
             + (duration.subsec_nanos() as u64 / NANOS_PER_MILLI);
         if dur as i32 >= 0xfc0i32 {
             0xffu8 // Max duration
