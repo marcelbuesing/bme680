@@ -14,16 +14,15 @@ pub enum OversamplingSetting {
 }
 
 impl OversamplingSetting {
-    // TODO replace with TryFrom once stabilized
-    pub fn from_u8(os: u8) -> OversamplingSetting {
-        match os {
+    pub fn from_u8(value: u8) -> OversamplingSetting {
+        match value {
             0 => OversamplingSetting::OSNone,
             1 => OversamplingSetting::OS1x,
             2 => OversamplingSetting::OS2x,
             3 => OversamplingSetting::OS4x,
             4 => OversamplingSetting::OS8x,
             5 => OversamplingSetting::OS16x,
-            _ => panic!("Unknown oversampling setting: {}", os),
+            _ => panic!("Unknown oversampling setting: {}", value),
         }
     }
 }
@@ -43,9 +42,8 @@ pub enum IIRFilterSize {
 }
 
 impl IIRFilterSize {
-    // TODO replace with TryFrom once stabilized
-    pub fn from_u8(os: u8) -> IIRFilterSize {
-        match os {
+    pub fn from_u8(value: u8) -> IIRFilterSize {
+        match value {
             0 => IIRFilterSize::Size0,
             1 => IIRFilterSize::Size1,
             2 => IIRFilterSize::Size3,
@@ -54,7 +52,7 @@ impl IIRFilterSize {
             5 => IIRFilterSize::Size31,
             6 => IIRFilterSize::Size63,
             7 => IIRFilterSize::Size127,
-            _ => panic!("Unknown IIRFilterSize: {}", os),
+            _ => panic!("Unknown IIRFilterSize: {}", value),
         }
     }
 }
@@ -62,20 +60,20 @@ impl IIRFilterSize {
 /// Temperature settings
 #[derive(Debug, Default, Copy)]
 #[repr(C)]
-pub struct TphSett {
+pub struct TemperatureSettings {
     /// Humidity oversampling
-    pub os_hum: Option<OversamplingSetting>,
+    pub humidity_oversampling: Option<OversamplingSetting>,
     /// Temperature oversampling
-    pub os_temp: Option<OversamplingSetting>,
+    pub temperature_oversampling: Option<OversamplingSetting>,
     /// Pressure oversampling
-    pub os_pres: Option<OversamplingSetting>,
+    pub pressure_oversampling: Option<OversamplingSetting>,
     /// Filter coefficient
-    pub filter: Option<IIRFilterSize>,
+    pub filter_size: Option<IIRFilterSize>,
     /// If set, the temperature t_fine will be increased by the given value in celsius.
     pub temperature_offset: Option<f32>,
 }
 
-impl Clone for TphSett {
+impl Clone for TemperatureSettings {
     fn clone(&self) -> Self {
         *self
     }
@@ -84,20 +82,22 @@ impl Clone for TphSett {
 /// Gas measurement settings
 #[derive(Debug, Default, Copy)]
 #[repr(C)]
-pub struct GasSett {
+pub struct GasSettings {
+    /// nb_conv is used to select heater set-points of the sensor.
     pub nb_conv: u8,
     /// Heater control
-    pub heatr_ctrl: Option<u8>,
+    pub heater_control: Option<u8>,
     /// Enable measurement of gas, disabled by default
-    pub run_gas_measurement: bool,
-    /// Heater temperature
-    pub heatr_temp: Option<u16>,
-    /// Profile duration
-    pub heatr_dur: Option<Duration>,
+    pub enable_gas_measurement: bool,
+    /// The heater temperature
+    pub heater_temperature: Option<u16>,
+    /// The Heating duration
+    pub heater_duration: Option<Duration>,
+    /// The ambient temperature.
     pub ambient_temperature: i8,
 }
 
-impl Clone for GasSett {
+impl Clone for GasSettings {
     fn clone(&self) -> Self {
         *self
     }
@@ -107,9 +107,9 @@ impl Clone for GasSett {
 #[derive(Debug, Default, Copy)]
 pub struct SensorSettings {
     /// Gas settings
-    pub gas_sett: GasSett,
+    pub gas_settings: GasSettings,
     /// Temperature settings
-    pub tph_sett: TphSett,
+    pub temperature_settings: TemperatureSettings,
 }
 
 impl Clone for SensorSettings {
@@ -132,9 +132,9 @@ bitflags! {
         /// To set gas measurement setting.
         const GAS_MEAS_SEL = 8;
         /// To set filter setting.
-        const FILTER_SEL = 16;
+        const FILTER_SIZE_SEL = 16;
         /// To set humidity control setting.
-        const HCNTRL_SEL = 32;
+        const HUMIDITY_CONTROL_SEL = 32;
         /// To set run gas setting.
         const RUN_GAS_SEL = 64;
         /// To set NB conversion setting.
@@ -171,74 +171,96 @@ pub struct SettingsBuilder {
 pub type Settings = (SensorSettings, DesiredSensorSettings);
 
 impl SettingsBuilder {
+    /// Constructs a new instance of the SettingsBuilder.
     pub fn new() -> SettingsBuilder {
         SettingsBuilder::default()
     }
 
-    pub fn with_temperature_filter(mut self, filter: IIRFilterSize) -> SettingsBuilder {
-        self.sensor_settings.tph_sett.filter = Some(filter);
-        self.desired_settings |= DesiredSensorSettings::FILTER_SEL;
+    /// With temperature filter.
+    pub fn with_temperature_filter(mut self, filter_size: IIRFilterSize) -> SettingsBuilder {
+        self.sensor_settings.temperature_settings.filter_size = Some(filter_size);
+        self.desired_settings |= DesiredSensorSettings::FILTER_SIZE_SEL;
         self
     }
 
-    pub fn with_humidity_control(mut self, heatr_control: u8) -> SettingsBuilder {
-        self.sensor_settings.gas_sett.heatr_ctrl = Some(heatr_control);
-        self.desired_settings |= DesiredSensorSettings::HCNTRL_SEL;
+    /// With gas heater control.
+    pub fn with_gas_heater_control(mut self, heater_control: u8) -> SettingsBuilder {
+        self.sensor_settings.gas_settings.heater_control = Some(heater_control);
+        self.desired_settings |= DesiredSensorSettings::HUMIDITY_CONTROL_SEL;
         self
     }
 
+    /// With temperature oversampling
     pub fn with_temperature_oversampling(
         mut self,
-        os_temp: OversamplingSetting,
+        temperature_oversampling: OversamplingSetting,
     ) -> SettingsBuilder {
-        self.sensor_settings.tph_sett.os_temp = Some(os_temp);
+        self.sensor_settings
+            .temperature_settings
+            .temperature_oversampling = Some(temperature_oversampling);
         self.desired_settings |= DesiredSensorSettings::OST_SEL;
         self
     }
 
-    pub fn with_pressure_oversampling(mut self, os_pres: OversamplingSetting) -> SettingsBuilder {
-        self.sensor_settings.tph_sett.os_pres = Some(os_pres);
+    /// With pressure oversampling.
+    pub fn with_pressure_oversampling(
+        mut self,
+        pressure_oversampling: OversamplingSetting,
+    ) -> SettingsBuilder {
+        self.sensor_settings
+            .temperature_settings
+            .pressure_oversampling = Some(pressure_oversampling);
         self.desired_settings |= DesiredSensorSettings::OSP_SEL;
         self
     }
 
-    pub fn with_humidity_oversampling(mut self, os_hum: OversamplingSetting) -> SettingsBuilder {
-        self.sensor_settings.tph_sett.os_hum = Some(os_hum);
+    /// With humidity oversampling.
+    pub fn with_humidity_oversampling(
+        mut self,
+        humidity_oversampling: OversamplingSetting,
+    ) -> SettingsBuilder {
+        self.sensor_settings
+            .temperature_settings
+            .humidity_oversampling = Some(humidity_oversampling);
         self.desired_settings |= DesiredSensorSettings::OSH_SEL;
         self
     }
 
+    /// With gas measurement.
     pub fn with_gas_measurement(
         mut self,
-        heatr_dur: Duration,
-        heatr_temp: u16,
+        heater_duration: Duration,
+        heater_temperature: u16,
         ambient_temperature: i8,
     ) -> SettingsBuilder {
-        self.sensor_settings.gas_sett.heatr_dur = Some(heatr_dur);
-        self.sensor_settings.gas_sett.heatr_temp = Some(heatr_temp);
-        self.sensor_settings.gas_sett.ambient_temperature = ambient_temperature;
+        self.sensor_settings.gas_settings.heater_duration = Some(heater_duration);
+        self.sensor_settings.gas_settings.heater_temperature = Some(heater_temperature);
+        self.sensor_settings.gas_settings.ambient_temperature = ambient_temperature;
         self.desired_settings |= DesiredSensorSettings::GAS_SENSOR_SEL;
         self
     }
 
+    /// With nb_conv.
     pub fn with_nb_conv(mut self, nb_conv: u8) -> SettingsBuilder {
-        self.sensor_settings.gas_sett.nb_conv = nb_conv;
+        self.sensor_settings.gas_settings.nb_conv = nb_conv;
         self.desired_settings |= DesiredSensorSettings::GAS_SENSOR_SEL;
         self
     }
 
+    /// With run gas.
     pub fn with_run_gas(mut self, run_gas: bool) -> SettingsBuilder {
-        self.sensor_settings.gas_sett.run_gas_measurement = run_gas;
+        self.sensor_settings.gas_settings.enable_gas_measurement = run_gas;
         self.desired_settings |= DesiredSensorSettings::GAS_SENSOR_SEL;
         self
     }
 
-    /// Temperature offset in Celsius, e.g. 4, -8, 1.25
+    /// With temperature offset in Celsius, e.g. 4, -8, 1.25
     pub fn with_temperature_offset(mut self, offset: f32) -> SettingsBuilder {
-        self.sensor_settings.tph_sett.temperature_offset = Some(offset);
+        self.sensor_settings.temperature_settings.temperature_offset = Some(offset);
         self
     }
 
+    /// Builds the settings object
     pub fn build(self) -> Settings {
         (self.sensor_settings, self.desired_settings)
     }

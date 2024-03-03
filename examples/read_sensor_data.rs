@@ -1,23 +1,21 @@
 #![no_std]
 
-use bme680::{Bme680, Error, I2CAddress, IIRFilterSize, OversamplingSetting, PowerMode, SettingsBuilder};
-use core::result;
+use bme680::i2c::Address;
+use bme680::{Bme680, IIRFilterSize, OversamplingSetting, PowerMode, SettingsBuilder};
 use core::time::Duration;
 use embedded_hal::delay::DelayNs;
 use linux_embedded_hal as hal;
-use linux_embedded_hal::{Delay, I2CError};
+use linux_embedded_hal::Delay;
 use log::info;
 
-
 // Please export RUST_LOG=info in order to see logs in the console.
-fn main() -> result::Result<(), Error<I2CError>>
-{
+fn main() -> Result<(), anyhow::Error> {
     env_logger::init();
 
     let i2c = hal::I2cdev::new("/dev/i2c-1").unwrap();
     let mut delayer = Delay {};
 
-    let mut dev = Bme680::init(i2c, &mut delayer, I2CAddress::Primary)?;
+    let mut dev = Bme680::init(i2c, &mut delayer, Address::Primary)?;
     let mut delay = Delay {};
 
     let settings = SettingsBuilder::new()
@@ -25,12 +23,11 @@ fn main() -> result::Result<(), Error<I2CError>>
         .with_pressure_oversampling(OversamplingSetting::OS4x)
         .with_temperature_oversampling(OversamplingSetting::OS8x)
         .with_temperature_filter(IIRFilterSize::Size3)
-        .with_gas_measurement(Duration::from_millis(1500), 320, 25)
-        .with_temperature_offset(-2.2)
+        .with_gas_measurement(Duration::from_millis(1500), 320, 23)
         .with_run_gas(true)
         .build();
 
-    let profile_dur = dev.get_profile_dur(&settings.0)?;
+    let profile_dur = dev.get_profile_duration(&settings.0)?;
     info!("Profile duration {:?}", profile_dur);
     info!("Setting sensor settings");
     dev.set_sensor_settings(&mut delayer, settings)?;
@@ -47,7 +44,7 @@ fn main() -> result::Result<(), Error<I2CError>>
         info!("Setting forced power modes");
         dev.set_sensor_mode(&mut delayer, PowerMode::ForcedMode)?;
         info!("Retrieving sensor data");
-        let (data, _state) = dev.get_sensor_data(&mut delayer)?;
+        let (data, _state) = dev.get_measurement(&mut delayer)?;
         info!("Sensor Data {:?}", data);
         info!("Temperature {}°C", data.temperature_celsius());
         info!("Pressure {}hPa", data.pressure_hpa());
