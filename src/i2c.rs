@@ -1,5 +1,5 @@
-use core::fmt::{Display, Formatter};
 use anyhow::anyhow;
+use core::fmt::{Display, Formatter};
 use embedded_hal::i2c::I2c;
 
 ///
@@ -46,11 +46,22 @@ impl I2CUtility {
 
         i2c_handle
             .write(device_address, &[register_address])
-            .map_err(|e| anyhow!("Failed to write a byte {} to device {}: {:?}", register_address, device_address, e))?;
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to write a byte {} to device {}: {:?}",
+                    register_address,
+                    device_address,
+                    e
+                )
+            })?;
 
         match i2c_handle.read(device_address, &mut buf) {
             Ok(()) => Ok(buf[0]),
-            Err(_e) => Err(anyhow!("Failed to read byte {} from device {}", register_address, device_address)),
+            Err(_e) => Err(anyhow!(
+                "Failed to read byte {} from device {}",
+                register_address,
+                device_address
+            )),
         }
     }
 
@@ -63,11 +74,21 @@ impl I2CUtility {
     ) -> Result<(), anyhow::Error> {
         i2c_handle
             .write(device_address, &[register_address])
-            .map_err(|_e| anyhow!("Failed to write a byte {} from device {}", register_address, device_address))?;
+            .map_err(|_e| {
+                anyhow!(
+                    "Failed to write a byte {} from device {}",
+                    register_address,
+                    device_address
+                )
+            })?;
 
         match i2c_handle.read(device_address, buffer) {
             Ok(()) => Ok(()),
-            Err(_e) => Err(anyhow!("Failed to read bytes from register {} and device {}", register_address, device_address)),
+            Err(_e) => Err(anyhow!(
+                "Failed to read bytes from register {} and device {}",
+                register_address,
+                device_address
+            )),
         }
     }
 

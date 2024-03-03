@@ -77,10 +77,10 @@ use crate::calculation::Calculation;
 use crate::hal::delay::DelayNs;
 use crate::hal::i2c::I2c;
 
+use anyhow::anyhow;
 use core::marker::PhantomData;
 use core::ops::DerefMut;
 use core::time::Duration;
-use anyhow::anyhow;
 use embedded_hal as hal;
 use log::{debug, error, info};
 
@@ -315,21 +315,29 @@ fn boundary_check_u8(
     if value < min {
         const MIN: &str = "Boundary check failure, value exceeds maximum";
         error!("{}, value name: {}", MIN, value_name);
-        return Err(anyhow!("Failed MIN={} boundary check for {}", MIN, value_name));
+        return Err(anyhow!(
+            "Failed MIN={} boundary check for {}",
+            MIN,
+            value_name
+        ));
     }
 
     if value > max {
         const MAX: &str = "Boundary check, value exceeds minimum";
         error!("{}, value name: {}", MAX, value_name);
-        return Err(anyhow!("Failed MAX={} boundary check for {}", MAX, value_name));
+        return Err(anyhow!(
+            "Failed MAX={} boundary check for {}",
+            MAX,
+            value_name
+        ));
     }
     Ok(value)
 }
 
 impl<I2C: I2c, D: DelayNs> Bme680<I2C, D>
-    where
-        D: DelayNs,
-        I2C: I2c,
+where
+    D: DelayNs,
+    I2C: I2c,
 {
     /// Sends the soft reset command to the chip.
     pub fn soft_reset(
@@ -706,9 +714,12 @@ impl<I2C: I2c, D: DelayNs> Bme680<I2C, D>
         Ok(duration)
     }
 
-    fn get_calibration_data<I2CX>(i2c: &mut I2CX, device_address: Address) -> Result<CalibrationData, anyhow::Error>
-        where
-            I2CX: I2c,
+    fn get_calibration_data<I2CX>(
+        i2c: &mut I2CX,
+        device_address: Address,
+    ) -> Result<CalibrationData, anyhow::Error>
+    where
+        I2CX: I2c,
     {
         let mut calibration_data: CalibrationData = Default::default();
 
@@ -721,7 +732,12 @@ impl<I2C: I2c, D: DelayNs> Bme680<I2C, D>
             BME680_COEFF_ADDR1,
             &mut coefficients_array[0..(BME680_COEFF_ADDR1_LEN - 1)],
         )
-            .map_err(|_e| anyhow!("Failed to get calibration data from device: {}", device_address))?;
+        .map_err(|_e| {
+            anyhow!(
+                "Failed to get calibration data from device: {}",
+                device_address
+            )
+        })?;
 
         I2CUtility::read_bytes::<I2CX>(
             i2c,
@@ -730,50 +746,73 @@ impl<I2C: I2c, D: DelayNs> Bme680<I2C, D>
             &mut coefficients_array
                 [BME680_COEFF_ADDR1_LEN..(BME680_COEFF_ADDR1_LEN + BME680_COEFF_ADDR2_LEN - 1)],
         )
-            .map_err(|_e| anyhow!("Failed to get calibration data from device: {}", device_address))?;
+        .map_err(|_e| {
+            anyhow!(
+                "Failed to get calibration data from device: {}",
+                device_address
+            )
+        })?;
 
-        calibration_data.par_t1 = ((coefficients_array[34usize] as i32) << 8i32 | coefficients_array[33usize] as i32) as u16;
-        calibration_data.par_t2 = ((coefficients_array[2usize] as i32) << 8i32 | coefficients_array[1usize] as i32) as i16;
+        calibration_data.par_t1 = ((coefficients_array[34usize] as i32) << 8i32
+            | coefficients_array[33usize] as i32) as u16;
+        calibration_data.par_t2 = ((coefficients_array[2usize] as i32) << 8i32
+            | coefficients_array[1usize] as i32) as i16;
         calibration_data.par_t3 = coefficients_array[3usize] as i8;
-        calibration_data.par_p1 = ((coefficients_array[6usize] as i32) << 8i32 | coefficients_array[5usize] as i32) as u16;
-        calibration_data.par_p2 = ((coefficients_array[8usize] as i32) << 8i32 | coefficients_array[7usize] as i32) as i16;
+        calibration_data.par_p1 = ((coefficients_array[6usize] as i32) << 8i32
+            | coefficients_array[5usize] as i32) as u16;
+        calibration_data.par_p2 = ((coefficients_array[8usize] as i32) << 8i32
+            | coefficients_array[7usize] as i32) as i16;
         calibration_data.par_p3 = coefficients_array[9usize] as i8;
-        calibration_data.par_p4 = ((coefficients_array[12usize] as i32) << 8i32 | coefficients_array[11usize] as i32) as i16;
-        calibration_data.par_p5 = ((coefficients_array[14usize] as i32) << 8i32 | coefficients_array[13usize] as i32) as i16;
+        calibration_data.par_p4 = ((coefficients_array[12usize] as i32) << 8i32
+            | coefficients_array[11usize] as i32) as i16;
+        calibration_data.par_p5 = ((coefficients_array[14usize] as i32) << 8i32
+            | coefficients_array[13usize] as i32) as i16;
         calibration_data.par_p6 = coefficients_array[16usize] as i8;
         calibration_data.par_p7 = coefficients_array[15usize] as i8;
-        calibration_data.par_p8 = ((coefficients_array[20usize] as i32) << 8i32 | coefficients_array[19usize] as i32) as i16;
-        calibration_data.par_p9 = ((coefficients_array[22usize] as i32) << 8i32 | coefficients_array[21usize] as i32) as i16;
+        calibration_data.par_p8 = ((coefficients_array[20usize] as i32) << 8i32
+            | coefficients_array[19usize] as i32) as i16;
+        calibration_data.par_p9 = ((coefficients_array[22usize] as i32) << 8i32
+            | coefficients_array[21usize] as i32) as i16;
         calibration_data.par_p10 = coefficients_array[23usize];
-        calibration_data.par_h1 =
-            ((coefficients_array[27usize] as i32) << 4i32 | coefficients_array[26usize] as i32 & 0xfi32) as u16;
-        calibration_data.par_h2 =
-            ((coefficients_array[25usize] as i32) << 4i32 | coefficients_array[26usize] as i32 >> 4i32) as u16;
+        calibration_data.par_h1 = ((coefficients_array[27usize] as i32) << 4i32
+            | coefficients_array[26usize] as i32 & 0xfi32) as u16;
+        calibration_data.par_h2 = ((coefficients_array[25usize] as i32) << 4i32
+            | coefficients_array[26usize] as i32 >> 4i32) as u16;
         calibration_data.par_h3 = coefficients_array[28usize] as i8;
         calibration_data.par_h4 = coefficients_array[29usize] as i8;
         calibration_data.par_h5 = coefficients_array[30usize] as i8;
         calibration_data.par_h6 = coefficients_array[31usize];
         calibration_data.par_h7 = coefficients_array[32usize] as i8;
         calibration_data.par_gh1 = coefficients_array[37usize] as i8;
-        calibration_data.par_gh2 =
-            ((coefficients_array[36usize] as i32) << 8i32 | coefficients_array[35usize] as i32) as i16;
+        calibration_data.par_gh2 = ((coefficients_array[36usize] as i32) << 8i32
+            | coefficients_array[35usize] as i32) as i16;
         calibration_data.par_gh3 = coefficients_array[38usize] as i8;
 
-        calibration_data.res_heat_range =
-            (I2CUtility::read_byte::<I2CX>(i2c, device_address.addr(), BME680_ADDR_RES_HEAT_RANGE_ADDR)
-                .map_err(|_e| anyhow!("Failed to read from register BME680_ADDR_RES_HEAT_RANGE_ADDR"))?
-                & 0x30)
-                / 16;
+        calibration_data.res_heat_range = (I2CUtility::read_byte::<I2CX>(
+            i2c,
+            device_address.addr(),
+            BME680_ADDR_RES_HEAT_RANGE_ADDR,
+        )
+        .map_err(|_e| anyhow!("Failed to read from register BME680_ADDR_RES_HEAT_RANGE_ADDR"))?
+            & 0x30)
+            / 16;
 
-        calibration_data.res_heat_val =
-            I2CUtility::read_byte::<I2CX>(i2c, device_address.addr(), BME680_ADDR_RES_HEAT_VAL_ADDR)
-                .map_err(|_e| anyhow!("Failed to read from register BME680_ADDR_RES_HEAT_VAL_ADDR"))? as i8;
+        calibration_data.res_heat_val = I2CUtility::read_byte::<I2CX>(
+            i2c,
+            device_address.addr(),
+            BME680_ADDR_RES_HEAT_VAL_ADDR,
+        )
+        .map_err(|_e| anyhow!("Failed to read from register BME680_ADDR_RES_HEAT_VAL_ADDR"))?
+            as i8;
 
-        calibration_data.range_sw_err =
-            (I2CUtility::read_byte::<I2CX>(i2c, device_address.addr(), BME680_ADDR_RANGE_SW_ERR_ADDR)
-                .map_err(|_e| anyhow!("Failed to read from register BME680_ADDR_RANGE_SW_ERR_ADDR"))?
-                & BME680_RSERROR_MSK)
-                / 16;
+        calibration_data.range_sw_err = (I2CUtility::read_byte::<I2CX>(
+            i2c,
+            device_address.addr(),
+            BME680_ADDR_RANGE_SW_ERR_ADDR,
+        )
+        .map_err(|_e| anyhow!("Failed to read from register BME680_ADDR_RANGE_SW_ERR_ADDR"))?
+            & BME680_RSERROR_MSK)
+            / 16;
 
         Ok(calibration_data)
     }
@@ -879,8 +918,11 @@ impl<I2C: I2c, D: DelayNs> Bme680<I2C, D>
                 data.temperature = temp;
                 data.pressure = Calculation::pressure(&self.calibration_data, t_fine, adc_pressure);
                 data.humidity = Calculation::humidity(&self.calibration_data, t_fine, adc_humidity);
-                data.gas_resistance =
-                    Calculation::gas_resistance(&self.calibration_data, adc_gas_resistance, gas_range);
+                data.gas_resistance = Calculation::gas_resistance(
+                    &self.calibration_data,
+                    adc_gas_resistance,
+                    gas_range,
+                );
                 return Ok((data, FieldDataCondition::NewData));
             }
 
