@@ -5,7 +5,7 @@
 //! In the examples you can find a demo how to use the library in Linux using the linux-embedded-hal crate (e.g. on a RPI).
 //! ```no_run
 
-//! use bme680::{Bme680, Bme680Error, IIRFilterSize, OversamplingSetting, PowerMode, SettingsBuilder};
+//! use bme680::{Bme680, IIRFilterSize, OversamplingSetting, PowerMode, SettingsBuilder};
 //! use core::time::Duration;
 //! use embedded_hal::delay::DelayNs;
 //! use linux_embedded_hal as hal;
@@ -14,7 +14,7 @@
 //! use bme680::i2c::Address;
 //!
 //! // Please export RUST_LOG=info in order to see logs in the console.
-//! fn main() -> Result<(), Bme680Error>
+//! fn main() -> Result<(), anyhow::Error>
 //! {
 //!     env_logger::init();
 //!
@@ -80,10 +80,10 @@ use crate::hal::i2c::I2c;
 use core::marker::PhantomData;
 use core::ops::DerefMut;
 use core::time::Duration;
+use anyhow::anyhow;
 use embedded_hal as hal;
 use log::{debug, error, info};
 
-use crate::Bme680Error::I2CRead;
 use i2c::{Address, I2CUtility};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -150,40 +150,6 @@ const BME680_HEAT_STAB_MSK: u8 = 0x10;
 /// Buffer length macro declaration
 const BME680_TMP_BUFFER_LENGTH: usize = 40;
 const BME680_REG_BUFFER_LENGTH: usize = 6;
-
-/// All possible errors in this crate
-/// TODO: use anyhow:
-/// - https://antoinerr.github.io/blog-website/2023/01/28/rust-anyhow.html
-/// - https://docs.rs/anyhow/latest/anyhow/
-#[derive(Debug)]
-pub enum Bme680Error {
-    ///
-    /// aka BME680_E_COM_FAIL
-    ///
-    I2CWrite,
-    I2CRead,
-    Delay,
-    ///
-    /// aka BME680_E_DEV_NOT_FOUND
-    ///
-    DeviceNotFound,
-    ///
-    /// aka BME680_E_INVALID_LENGTH
-    ///
-    InvalidLength,
-    ///
-    /// Warning aka BME680_W_DEFINE_PWR_MODE
-    ///
-    DefinePwrMode,
-    ///
-    /// Warning aka BME680_W_DEFINE_PWR_MODE
-    ///
-    NoNewData,
-    ///
-    /// Warning Boundary Check
-    ///
-    BoundaryCheckFailure(&'static str),
-}
 
 ///
 /// Power mode settings of the sensor.
@@ -343,34 +309,34 @@ fn boundary_check_u8(
     value_name: &'static str,
     min: u8,
     max: u8,
-) -> Result<u8, Bme680Error> {
-    let value = value.ok_or(Bme680Error::BoundaryCheckFailure(value_name))?;
+) -> Result<u8, anyhow::Error> {
+    let value = value.ok_or(anyhow!("Boundary check failed for {}", value_name))?;
 
     if value < min {
         const MIN: &str = "Boundary check failure, value exceeds maximum";
         error!("{}, value name: {}", MIN, value_name);
-        return Err(Bme680Error::BoundaryCheckFailure(MIN));
+        return Err(anyhow!("Failed MIN={} boundary check for {}", MIN, value_name));
     }
 
     if value > max {
         const MAX: &str = "Boundary check, value exceeds minimum";
         error!("{}, value name: {}", MAX, value_name);
-        return Err(Bme680Error::BoundaryCheckFailure(MAX));
+        return Err(anyhow!("Failed MAX={} boundary check for {}", MAX, value_name));
     }
     Ok(value)
 }
 
 impl<I2C: I2c, D: DelayNs> Bme680<I2C, D>
-where
-    D: DelayNs,
-    I2C: I2c,
+    where
+        D: DelayNs,
+        I2C: I2c,
 {
     /// Sends the soft reset command to the chip.
     pub fn soft_reset(
         i2c_handle: &mut I2C,
         delay: &mut D,
         device_address: Address,
-    ) -> Result<(), Bme680Error> {
+    ) -> Result<(), anyhow::Error> {
         let tmp_buff: [u8; 2] = [BME680_SOFT_RESET_ADDR, BME680_SOFT_RESET_CMD];
         I2CUtility::write_bytes(i2c_handle, device_address.addr(), &tmp_buff)?;
         delay.delay_ms(BME680_RESET_PERIOD as u32);
@@ -382,7 +348,7 @@ where
         mut i2c_handle: I2C,
         delay: &mut D,
         device_address: Address,
-    ) -> Result<Bme680<I2C, D>, Bme680Error> {
+    ) -> Result<Bme680<I2C, D>, anyhow::Error> {
         Bme680::soft_reset(&mut i2c_handle, delay, device_address)?;
 
         debug!("Reading chip id");
@@ -411,14 +377,14 @@ where
             Ok(device)
         } else {
             error!("Device does not match chip id {}", BME680_CHIP_ID);
-            Err(Bme680Error::DeviceNotFound)
+            Err(anyhow!("Device address not found"))
         }
     }
 
     /// Sets the sensor registers.
-    fn bme680_set_registers(&mut self, registers: &[(u8, u8)]) -> Result<(), Bme680Error> {
+    fn bme680_set_registers(&mut self, registers: &[(u8, u8)]) -> Result<(), anyhow::Error> {
         if registers.is_empty() || registers.len() > (BME680_TMP_BUFFER_LENGTH / 2) {
-            return Err(Bme680Error::InvalidLength);
+            return Err(anyhow!("Invalid register length!"));
         }
 
         for (register_address, register_data) in registers {
@@ -443,7 +409,7 @@ where
         &mut self,
         delay: &mut D,
         settings: Settings,
-    ) -> Result<(), Bme680Error> {
+    ) -> Result<(), anyhow::Error> {
         let (sensor_settings, desired_settings) = settings;
         let tph_sett = sensor_settings.temperature_settings;
         let gas_sett = sensor_settings.gas_settings;
@@ -589,7 +555,7 @@ where
     pub fn get_sensor_settings(
         &mut self,
         desired_settings: DesiredSensorSettings,
-    ) -> Result<SensorSettings, Bme680Error> {
+    ) -> Result<SensorSettings, anyhow::Error> {
         let reg_addr: u8 = 0x70u8;
         let mut data_array: [u8; BME680_REG_BUFFER_LENGTH] = [0; BME680_REG_BUFFER_LENGTH];
         let mut sensor_settings: SensorSettings = Default::default();
@@ -654,7 +620,7 @@ where
         &mut self,
         delay: &mut D,
         target_power_mode: PowerMode,
-    ) -> Result<(), Bme680Error> {
+    ) -> Result<(), anyhow::Error> {
         let mut power_mode_byte: u8;
         let mut power_mode: PowerMode;
 
@@ -692,7 +658,7 @@ where
     }
 
     /// Retrieve current sensor power mode via registers
-    pub fn get_sensor_mode(&mut self) -> Result<PowerMode, Bme680Error> {
+    pub fn get_sensor_mode(&mut self) -> Result<PowerMode, anyhow::Error> {
         let registers = I2CUtility::read_byte(
             self.i2c_bus_handle.borrow_mut().deref_mut(),
             self.device_address.addr(),
@@ -705,7 +671,7 @@ where
     pub fn get_profile_duration(
         &self,
         sensor_settings: &SensorSettings,
-    ) -> Result<Duration, Bme680Error> {
+    ) -> Result<Duration, anyhow::Error> {
         let os_to_meas_cycles: [u8; 6] = [0u8, 1u8, 2u8, 4u8, 8u8, 16u8];
         let mut measurement_cycles = os_to_meas_cycles[sensor_settings
             .temperature_settings
@@ -740,9 +706,9 @@ where
         Ok(duration)
     }
 
-    fn get_calibration_data<I2CX>(i2c: &mut I2CX, device_address: Address) -> Result<CalibrationData, Bme680Error>
-    where
-        I2CX: I2c,
+    fn get_calibration_data<I2CX>(i2c: &mut I2CX, device_address: Address) -> Result<CalibrationData, anyhow::Error>
+        where
+            I2CX: I2c,
     {
         let mut calibration_data: CalibrationData = Default::default();
 
@@ -755,7 +721,7 @@ where
             BME680_COEFF_ADDR1,
             &mut coefficients_array[0..(BME680_COEFF_ADDR1_LEN - 1)],
         )
-        .map_err(|_e| I2CRead)?;
+            .map_err(|_e| anyhow!("Failed to get calibration data from device: {}", device_address))?;
 
         I2CUtility::read_bytes::<I2CX>(
             i2c,
@@ -764,7 +730,7 @@ where
             &mut coefficients_array
                 [BME680_COEFF_ADDR1_LEN..(BME680_COEFF_ADDR1_LEN + BME680_COEFF_ADDR2_LEN - 1)],
         )
-        .map_err(|_e| I2CRead)?;
+            .map_err(|_e| anyhow!("Failed to get calibration data from device: {}", device_address))?;
 
         calibration_data.par_t1 = ((coefficients_array[34usize] as i32) << 8i32 | coefficients_array[33usize] as i32) as u16;
         calibration_data.par_t2 = ((coefficients_array[2usize] as i32) << 8i32 | coefficients_array[1usize] as i32) as i16;
@@ -795,26 +761,26 @@ where
 
         calibration_data.res_heat_range =
             (I2CUtility::read_byte::<I2CX>(i2c, device_address.addr(), BME680_ADDR_RES_HEAT_RANGE_ADDR)
-                .map_err(|_e| I2CRead)?
+                .map_err(|_e| anyhow!("Failed to read from register BME680_ADDR_RES_HEAT_RANGE_ADDR"))?
                 & 0x30)
                 / 16;
 
         calibration_data.res_heat_val =
             I2CUtility::read_byte::<I2CX>(i2c, device_address.addr(), BME680_ADDR_RES_HEAT_VAL_ADDR)
-                .map_err(|_e| I2CRead)? as i8;
+                .map_err(|_e| anyhow!("Failed to read from register BME680_ADDR_RES_HEAT_VAL_ADDR"))? as i8;
 
         calibration_data.range_sw_err =
             (I2CUtility::read_byte::<I2CX>(i2c, device_address.addr(), BME680_ADDR_RANGE_SW_ERR_ADDR)
-                .map_err(|_e| I2CRead)?
+                .map_err(|_e| anyhow!("Failed to read from register BME680_ADDR_RANGE_SW_ERR_ADDR"))?
                 & BME680_RSERROR_MSK)
                 / 16;
 
         Ok(calibration_data)
     }
 
-    fn set_gas_settings(&mut self, gas_settings: GasSettings) -> Result<(), Bme680Error> {
+    fn set_gas_settings(&mut self, gas_settings: GasSettings) -> Result<(), anyhow::Error> {
         if self.power_mode != PowerMode::ForcedMode {
-            return Err(Bme680Error::DefinePwrMode);
+            return Err(anyhow!("Current power mode is not forced"));
         }
 
         let reg: [(u8, u8); 2] = [
@@ -839,14 +805,14 @@ where
         self.bme680_set_registers(&reg)
     }
 
-    fn get_gas_settings(&mut self) -> Result<GasSettings, Bme680Error> {
+    fn get_gas_settings(&mut self) -> Result<GasSettings, anyhow::Error> {
         let heater_temperature = Some(I2CUtility::read_byte(
             self.i2c_bus_handle.borrow_mut().deref_mut(),
             self.device_address.addr(),
             BME680_ADDR_SENS_CONF_START,
         )? as u16);
 
-        let heatr_dur_ms = I2CUtility::read_byte(
+        let heater_duration_ms = I2CUtility::read_byte(
             self.i2c_bus_handle.borrow_mut().deref_mut(),
             self.device_address.addr(),
             BME680_ADDR_GAS_CONF_START,
@@ -854,7 +820,7 @@ where
 
         let gas_sett = GasSettings {
             heater_temperature,
-            heater_duration: Some(Duration::from_millis(heatr_dur_ms)),
+            heater_duration: Some(Duration::from_millis(heater_duration_ms)),
             ..Default::default()
         };
 
@@ -865,7 +831,7 @@ where
     pub fn get_measurement(
         &mut self,
         delay: &mut D,
-    ) -> Result<(FieldData, FieldDataCondition), Bme680Error> {
+    ) -> Result<(FieldData, FieldDataCondition), anyhow::Error> {
         let mut buffer: [u8; BME680_FIELD_LENGTH] = [0; BME680_FIELD_LENGTH];
 
         debug!("Buf {:?}, len: {}", buffer, buffer.len());
