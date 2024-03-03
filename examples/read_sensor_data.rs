@@ -27,7 +27,7 @@ fn main() -> Result<(), Bme680Error> {
         .with_run_gas(true)
         .build();
 
-    let profile_dur = dev.get_profile_dur(&settings.0)?;
+    let profile_dur = dev.get_profile_duration(&settings.0)?;
     info!("Profile duration {:?}", profile_dur);
     info!("Setting sensor settings");
     dev.set_sensor_settings(&mut delayer, settings)?;
@@ -44,7 +44,7 @@ fn main() -> Result<(), Bme680Error> {
         info!("Setting forced power modes");
         dev.set_sensor_mode(&mut delayer, PowerMode::ForcedMode)?;
         info!("Retrieving sensor data");
-        let (data, _state) = dev.get_sensor_data(&mut delayer)?;
+        let (data, _state) = dev.get_measurement(&mut delayer)?;
         info!("Sensor Data {:?}", data);
         info!("Temperature {}°C", data.temperature_celsius());
         info!("Pressure {}hPa", data.pressure_hpa());
