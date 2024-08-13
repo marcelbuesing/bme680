@@ -24,7 +24,7 @@ impl Calc {
         // TODO replace once https://github.com/rust-lang/rust/pull/50167 has been merged
         const MILLIS_PER_SEC: u64 = 1_000;
         const NANOS_PER_MILLI: u64 = 1_000_000;
-        let mut dur = (duration.as_secs() as u64 * MILLIS_PER_SEC)
+        let mut dur = (duration.as_secs() * MILLIS_PER_SEC)
             + (duration.subsec_nanos() as u64 / NANOS_PER_MILLI);
         if dur as i32 >= 0xfc0i32 {
             0xffu8 // Max duration
@@ -115,11 +115,7 @@ impl Calc {
         let var5: i32 = ((var3 >> 14i32) * (var3 >> 14i32)) >> 10i32;
         let var6: i32 = (var4 * var5) >> 1i32;
         let mut calc_hum: i32 = (((var3 + var6) >> 10i32) * 1000i32) >> 12i32;
-        if calc_hum > 100000i32 {
-            calc_hum = 100000i32;
-        } else if calc_hum < 0i32 {
-            calc_hum = 0i32;
-        }
+        calc_hum = calc_hum.clamp(0i32, 100000i32);
         calc_hum as u32
     }
 
