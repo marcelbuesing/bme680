@@ -5,7 +5,7 @@ documentation = "https://docs.rs/bme680"
 license = "MIT"
 name = "bme680"
 repository = "https://github.com/marcelbuesing/bme680-hal"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2018"
 
 [badges]
@@ -14,7 +14,7 @@ maintenance = { status = "passively-maintained" }
 
 [dependencies]
 bitflags = "1.2"
-embedded-hal = "=1.0.0-alpha.5"
+embedded-hal = "=1.0"
 log = "0.4"
 serde = { version = "1.0", optional = true, default-features = false }
 
