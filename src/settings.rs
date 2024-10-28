@@ -140,7 +140,7 @@ bitflags! {
         /// To set NB conversion setting.
         const NBCONV_SEL = 128;
         /// To set all gas sensor related settings
-        const GAS_SENSOR_SEL = Self::GAS_MEAS_SEL.bits | Self::RUN_GAS_SEL.bits | Self::NBCONV_SEL.bits;
+        const GAS_SENSOR_SEL = Self::GAS_MEAS_SEL.bits() | Self::RUN_GAS_SEL.bits() | Self::NBCONV_SEL.bits();
     }
 }
 
