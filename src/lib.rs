@@ -19,39 +19,39 @@
 //!
 //! # mod hal {
 //! #   use super::*;
-//! #   use embedded_hal::blocking::delay;
+//! #   use embedded_hal::delay;
 //! #
 //! #   #[derive(Debug)]
 //! #   pub struct Delay {}
 //! #
 //! #   impl delay::DelayNs for Delay {
-//! #       fn delay_ms(&mut self, _ms: u32) {}
+//! #       fn delay_ns(&mut self, _ns: u32) {}
 //! #   }
 //! #
 //! #   #[derive(Debug)]
 //! #   pub enum I2CError {}
 //! #
-//! #   pub struct I2cdev {}
 //! #
-//! #   impl i2c::Write for I2cdev {
-//! #       type Error = I2CError;
-//! #
-//! #       fn write<'w>(&mut self, addr: u8, bytes: &'w [u8]) -> result::Result<(), Self::Error> {
-//! #           Ok(())
+//! #   impl i2c::Error for I2CError {
+//! #       fn kind(&self) -> i2c::ErrorKind {
+//! #           i2c::ErrorKind::Other
 //! #       }
 //! #   }
 //! #
-//! #   impl i2c::Read for I2cdev {
-//! #       type Error = I2CError;
+//! #   pub struct I2cdev {}
 //! #
-//! #       fn read<'w>(&mut self, addr: u8, bytes: &'w mut [u8]) -> result::Result<(), Self::Error> {
+//! #   impl i2c::ErrorType for I2cdev {
+//! #       type Error = I2CError;
+//! #   }
+//! #
+//! #   impl i2c::I2c for I2cdev {
+//! #       fn transaction(&mut self, addr: u8, operations: &mut [i2c::Operation]) -> Result<(), Self::Error> {
 //! #           Ok(())
 //! #       }
 //! #   }
 //! # }
 //!
-//! fn main() -> result::Result<(), Error<embedded_hal::i2c::I2c::Error>>
-//! {
+//! fn main() -> result::Result<(), bme680::Error<I2CError>> {
 //!     // Initialize device
 //!     let i2c = I2cdev {};        // Your I2C device construction will look different, perhaps using I2cdev::new(..)
 //!     let mut delayer = Delay {}; // Your Delay construction will look different, perhaps using Delay::new(..)
