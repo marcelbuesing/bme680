@@ -104,7 +104,7 @@ impl Clone for GasSett {
 }
 
 /// Stores gas and temperature settings
-#[derive(Debug, Default, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct SensorSettings {
     /// Gas settings
     pub gas_sett: GasSett,
@@ -112,16 +112,10 @@ pub struct SensorSettings {
     pub tph_sett: TphSett,
 }
 
-impl Clone for SensorSettings {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
 bitflags! {
     /// Flags that determine what settings are to be set and what settings are to be read.
     /// Use the `SettingsBuilder` to initialize an instance when setting the settings.
-    #[derive(Default)]
+    #[derive(Debug, Default, Clone, Copy)]
     pub struct DesiredSensorSettings: u16 {
         /// To set temperature oversampling
         const OST_SEL = 1;
@@ -161,7 +155,7 @@ bitflags! {
 ///     .with_run_gas(true)
 ///     .build();
 /// ```
-#[derive(Default)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct SettingsBuilder {
     desired_settings: DesiredSensorSettings,
     sensor_settings: SensorSettings,
