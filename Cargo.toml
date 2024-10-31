@@ -19,9 +19,9 @@ log = "0.4"
 serde = { version = "1.0", optional = true, default-features = false }
 
 [dev-dependencies]
-env_logger = "0.9"
+env_logger = "0.11"
 futures = { version = "0.3" }
-i2cdev = "0.5"
+i2cdev = "0.6"
 influx_db_client = { version = "0.5", default-features= false, features = ["rustls-tls"] }
 tokio = {version = "1.5", features = ["full"] }
 url = "2.1"
